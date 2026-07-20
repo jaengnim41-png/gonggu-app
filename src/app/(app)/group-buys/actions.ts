@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionProfile } from "@/lib/data/profile";
+import { parseOrderWorkbook } from "@/lib/orders/parse";
 
 function str(v: FormDataEntryValue | null): string | null {
   const s = String(v ?? "").trim();
@@ -94,4 +95,63 @@ export async function deleteItem(formData: FormData) {
   await supabase.from("group_buy_items").delete().eq("id", id);
   revalidatePath(`/group-buys/${groupBuyId}`);
   redirect(`/group-buys/${groupBuyId}`);
+}
+
+export async function uploadOrders(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const file = formData.get("file");
+  if (!groupBuyId) redirect("/group-buys");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/group-buys/${groupBuyId}?uerror=file`);
+  }
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+
+  const supabase = await createClient();
+
+  // 이 공구의 상품번호 집합
+  const { data: items } = await supabase
+    .from("group_buy_items")
+    .select("store_product_no")
+    .eq("group_buy_id", groupBuyId);
+  const productNos = new Set(
+    (items ?? [])
+      .map((i) => String(i.store_product_no ?? "").trim())
+      .filter(Boolean),
+  );
+  if (productNos.size === 0) {
+    redirect(`/group-buys/${groupBuyId}?uerror=noitems`);
+  }
+
+  // 엑셀 파싱 → 이 공구 상품번호에 해당하는 행만
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const parsed = parseOrderWorkbook(bytes);
+  const matched = parsed.filter((o) => productNos.has(o.storeProductNo));
+
+  if (matched.length === 0) {
+    redirect(`/group-buys/${groupBuyId}?uerror=nomatch`);
+  }
+
+  const rows = matched.map((o) => ({
+    company_id: company.id,
+    group_buy_id: groupBuyId,
+    product_order_no: o.productOrderNo,
+    order_no: o.orderNo,
+    store_product_no: o.storeProductNo,
+    product_name: o.productName,
+    option_info: o.optionInfo,
+    quantity: o.quantity,
+    order_status: o.orderStatus,
+    paid_at: o.paidAt,
+  }));
+
+  // 멱등: 같은 상품주문번호는 덮어쓰기
+  const { error } = await supabase
+    .from("orders")
+    .upsert(rows, { onConflict: "company_id,product_order_no" });
+
+  if (error) redirect(`/group-buys/${groupBuyId}?uerror=save`);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}?uok=${matched.length}`);
 }
