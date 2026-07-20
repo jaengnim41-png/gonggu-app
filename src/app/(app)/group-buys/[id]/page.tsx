@@ -2,7 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
-import { addItem, deleteItem, uploadOrders } from "../actions";
+import {
+  addItem,
+  deleteItem,
+  uploadOrders,
+  startSettlement,
+  saveFeeRate,
+  setSettlementStatus,
+} from "../actions";
 
 type GroupBuy = {
   id: string;
@@ -20,6 +27,12 @@ type Item = {
   store_product_no: string | null;
   allocated_qty: number | null;
   gonggu_price: number | null;
+  margin_unit: number | null;
+};
+
+type Settlement = {
+  fee_rate: number;
+  status: string;
 };
 
 type Order = {
@@ -58,10 +71,16 @@ export default async function GroupBuyDetailPage({
 
   const { data: itemData } = await supabase
     .from("group_buy_items")
-    .select("id, product_name, store_product_no, allocated_qty, gonggu_price")
+    .select("id, product_name, store_product_no, allocated_qty, gonggu_price, margin_unit")
     .eq("group_buy_id", id)
     .order("created_at", { ascending: true });
   const items = (itemData ?? []) as Item[];
+
+  const { data: settlement } = await supabase
+    .from("settlements")
+    .select("fee_rate, status")
+    .eq("group_buy_id", id)
+    .maybeSingle<Settlement>();
 
   const { data: orderData } = await supabase
     .from("orders")
@@ -107,6 +126,17 @@ export default async function GroupBuyDetailPage({
     totalAmount += amount;
   }
   const salesRows = [...salesByOption.entries()].sort((a, b) => b[1].amount - a[1].amount);
+
+  // 정산 계산: 매출·마진·수수료·최종
+  let marginTotal = 0;
+  for (const it of items) {
+    const sold = soldByPno.get(String(it.store_product_no ?? "")) ?? 0;
+    marginTotal += sold * (it.margin_unit ?? 0);
+  }
+  const feeRate = settlement?.fee_rate ?? 3.495;
+  const feeAmount = Math.round((totalAmount * feeRate) / 100);
+  const finalAmount = marginTotal - feeAmount;
+  const hasSales = totalQty > 0;
 
   const inputCls =
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
@@ -213,6 +243,10 @@ export default async function GroupBuyDetailPage({
             <label className="text-sm font-medium text-slate-700">
               공구가
               <input name="gonggu_price" inputMode="numeric" placeholder="16900" className={inputCls} />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              마진단가 <span className="text-slate-400">(정산용, 1개당 마진)</span>
+              <input name="margin_unit" inputMode="numeric" placeholder="4225" className={inputCls} />
             </label>
             <div className="sm:col-span-2">
               <button
@@ -333,6 +367,142 @@ export default async function GroupBuyDetailPage({
             대표님 ‘판매현황’ 스샷과 같은 형태로 자동 생성됩니다. 판매금액 = 수량 × 공구가.
           </p>
         </>
+      )}
+
+      {/* 정산 */}
+      {hasSales && (
+        <div id="settlement">
+          <h2 className="mt-8 text-sm font-bold text-slate-900">정산</h2>
+          <div className="mt-3 max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            {settlement && (
+              <div className="mb-4 flex items-center gap-2">
+                <span className="text-xs text-slate-500">진행 상태</span>
+                <span
+                  className={
+                    "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
+                    (settlement.status === "전달"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : settlement.status === "승인"
+                        ? "bg-indigo-50 text-indigo-700"
+                        : "bg-amber-50 text-amber-700")
+                  }
+                >
+                  {settlement.status === "검토중"
+                    ? "브랜드 확인 대기"
+                    : settlement.status === "승인"
+                      ? "승인됨 · 전달 대기"
+                      : "상대에 전달 완료"}
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">매출 합계</span>
+                <b className="tabular-nums">{won(totalAmount)}</b>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">마진 합계</span>
+                <b className="tabular-nums">{won(marginTotal)}</b>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">결제수수료 ({feeRate}%)</span>
+                <b className="tabular-nums text-rose-600">-{won(feeAmount)}</b>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-2">
+                <b>최종 정산금액</b>
+                <b className="text-lg tabular-nums">{won(finalAmount)}</b>
+              </div>
+            </div>
+
+            {!settlement ? (
+              <form action={startSettlement} className="mt-5">
+                <input type="hidden" name="group_buy_id" value={gb.id} />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                >
+                  정산 시작
+                </button>
+              </form>
+            ) : (
+              <div className="mt-5 space-y-3">
+                {settlement.status === "검토중" && (
+                  <>
+                    <form action={saveFeeRate} className="flex items-end gap-2">
+                      <input type="hidden" name="group_buy_id" value={gb.id} />
+                      <label className="text-sm text-slate-700">
+                        수수료율(%)
+                        <input
+                          name="fee_rate"
+                          inputMode="decimal"
+                          defaultValue={feeRate}
+                          className="mt-1 w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        수수료율 저장
+                      </button>
+                    </form>
+                    <form action={setSettlementStatus}>
+                      <input type="hidden" name="group_buy_id" value={gb.id} />
+                      <input type="hidden" name="status" value="승인" />
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                      >
+                        브랜드 승인 →
+                      </button>
+                    </form>
+                  </>
+                )}
+                {settlement.status === "승인" && (
+                  <div className="flex gap-2">
+                    <form action={setSettlementStatus}>
+                      <input type="hidden" name="group_buy_id" value={gb.id} />
+                      <input type="hidden" name="status" value="검토중" />
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        ← 되돌리기
+                      </button>
+                    </form>
+                    <form action={setSettlementStatus}>
+                      <input type="hidden" name="group_buy_id" value={gb.id} />
+                      <input type="hidden" name="status" value="전달" />
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                      >
+                        상대에 전달 →
+                      </button>
+                    </form>
+                  </div>
+                )}
+                {settlement.status === "전달" && (
+                  <form action={setSettlementStatus}>
+                    <input type="hidden" name="group_buy_id" value={gb.id} />
+                    <input type="hidden" name="status" value="승인" />
+                    <button
+                      type="submit"
+                      className="text-xs text-slate-400 hover:underline"
+                    >
+                      전달 취소(되돌리기)
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            최종정산 = 마진합계 − (매출 × 수수료율). 마진합계는 공구상품의 ‘마진단가 × 판매수량’ 합계입니다.
+            수수료율은 업체별로 편집하세요. (2단계 승인: 브랜드 확인 → 상대 전달)
+          </p>
+        </div>
       )}
     </div>
   );

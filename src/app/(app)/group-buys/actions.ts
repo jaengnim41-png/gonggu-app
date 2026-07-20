@@ -80,6 +80,7 @@ export async function addItem(formData: FormData) {
     store_product_no: str(formData.get("store_product_no")),
     allocated_qty: int(formData.get("allocated_qty")),
     gonggu_price: num(formData.get("gonggu_price")),
+    margin_unit: num(formData.get("margin_unit")),
   });
 
   if (error) redirect(`/group-buys/${groupBuyId}?error=save`);
@@ -154,4 +155,55 @@ export async function uploadOrders(formData: FormData) {
   if (error) redirect(`/group-buys/${groupBuyId}?uerror=save`);
   revalidatePath(`/group-buys/${groupBuyId}`);
   redirect(`/group-buys/${groupBuyId}?uok=${matched.length}`);
+}
+
+/** 정산 시작: settlements 행을 만들고 '검토중' 상태로 둡니다. */
+export async function startSettlement(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!groupBuyId) redirect("/group-buys");
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+
+  const supabase = await createClient();
+  await supabase
+    .from("settlements")
+    .upsert(
+      { company_id: company.id, group_buy_id: groupBuyId, status: "검토중" },
+      { onConflict: "group_buy_id" },
+    );
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}#settlement`);
+}
+
+/** 수수료율 저장 (계산식 편집) */
+export async function saveFeeRate(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const rate = num(formData.get("fee_rate"));
+  if (!groupBuyId) redirect("/group-buys");
+
+  const supabase = await createClient();
+  await supabase
+    .from("settlements")
+    .update({ fee_rate: rate ?? 0, updated_at: new Date().toISOString() })
+    .eq("group_buy_id", groupBuyId);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}#settlement`);
+}
+
+/** 정산 상태 변경: 검토중 → 승인 → 전달 (2단계 승인) */
+export async function setSettlementStatus(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (!groupBuyId || !["검토중", "승인", "전달"].includes(status)) {
+    redirect(`/group-buys/${groupBuyId}#settlement`);
+  }
+
+  const supabase = await createClient();
+  await supabase
+    .from("settlements")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("group_buy_id", groupBuyId);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}#settlement`);
 }
