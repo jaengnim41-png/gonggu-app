@@ -23,12 +23,15 @@ export default async function DashboardPage() {
             제품과 하위 옵션을 등록·수정하고 목록을 관리합니다.
           </p>
         </a>
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6">
-          <div className="text-sm font-semibold text-slate-400">공구 관리 (준비 중)</div>
-          <p className="mt-1 text-xs text-slate-400">
-            다음 단계에서 공구 등록·배정 수량·판매현황을 채웁니다.
+        <a
+          href="/group-buys"
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-indigo-400"
+        >
+          <div className="text-sm font-semibold text-slate-900">공구 관리 →</div>
+          <p className="mt-1 text-xs text-slate-500">
+            공구를 등록하고 제품별 배정 수량을 정합니다.
           </p>
-        </div>
+        </a>
       </div>
     </div>
   );

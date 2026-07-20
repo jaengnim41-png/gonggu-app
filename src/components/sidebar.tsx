@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const NAV: { href: string; label: string; icon: string }[] = [
   { href: "/dashboard", label: "대시보드", icon: "▤" },
+  { href: "/group-buys", label: "공구", icon: "▥" },
   { href: "/products", label: "제품", icon: "▧" },
 ];
 
