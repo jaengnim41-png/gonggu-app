@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
@@ -9,7 +10,10 @@ import {
   startSettlement,
   saveFeeRate,
   setSettlementStatus,
+  createShareLink,
+  toggleShareLink,
 } from "../actions";
+import { CopyLink } from "@/components/copy-link";
 
 type GroupBuy = {
   id: string;
@@ -81,6 +85,17 @@ export default async function GroupBuyDetailPage({
     .select("fee_rate, status")
     .eq("group_buy_id", id)
     .maybeSingle<Settlement>();
+
+  const { data: shareLink } = await supabase
+    .from("share_links")
+    .select("token, active")
+    .eq("group_buy_id", id)
+    .maybeSingle<{ token: string; active: boolean }>();
+
+  const hdrs = await headers();
+  const host = hdrs.get("host") ?? "";
+  const proto = hdrs.get("x-forwarded-proto") ?? "https";
+  const shareUrl = shareLink ? `${proto}://${host}/share/${shareLink.token}` : "";
 
   const { data: orderData } = await supabase
     .from("orders")
@@ -166,6 +181,57 @@ export default async function GroupBuyDetailPage({
           기간 {gb.start_date ?? "—"} ~ {gb.end_date ?? "—"} · 정산 종료 후 {gb.settle_days}일
         </div>
         {gb.memo && <p className="mt-2 text-xs text-slate-500">메모: {gb.memo}</p>}
+      </div>
+
+      {/* 비로그인 공유 링크 */}
+      <div id="share" className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">공유 링크 (비로그인 열람)</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              가입 없이 이 공구의 판매현황을 볼 수 있는 링크입니다. (정산 금액은 제외)
+            </p>
+          </div>
+          {!shareLink && (
+            <form action={createShareLink}>
+              <input type="hidden" name="group_buy_id" value={gb.id} />
+              <button
+                type="submit"
+                className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+              >
+                링크 만들기
+              </button>
+            </form>
+          )}
+        </div>
+
+        {shareLink && shareLink.active && (
+          <div className="mt-3">
+            <CopyLink url={shareUrl} />
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              <span className="font-medium text-emerald-600">● 활성</span>
+              <form action={toggleShareLink}>
+                <input type="hidden" name="group_buy_id" value={gb.id} />
+                <input type="hidden" name="active" value="false" />
+                <button type="submit" className="text-slate-500 hover:underline">
+                  링크 비활성화
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+        {shareLink && !shareLink.active && (
+          <div className="mt-3 flex items-center gap-3 text-xs">
+            <span className="text-slate-400">링크가 비활성화되어 있습니다.</span>
+            <form action={toggleShareLink}>
+              <input type="hidden" name="group_buy_id" value={gb.id} />
+              <input type="hidden" name="active" value="true" />
+              <button type="submit" className="font-medium text-indigo-600 hover:underline">
+                다시 활성화
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* 주문 엑셀 업로드 */}

@@ -191,6 +191,54 @@ export async function saveFeeRate(formData: FormData) {
   redirect(`/group-buys/${groupBuyId}#settlement`);
 }
 
+/** 공유 링크 생성(없으면 토큰 발급) */
+export async function createShareLink(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!groupBuyId) redirect("/group-buys");
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("share_links")
+    .select("id")
+    .eq("group_buy_id", groupBuyId)
+    .maybeSingle();
+
+  if (!existing) {
+    const token = crypto.randomUUID().replace(/-/g, "");
+    await supabase.from("share_links").insert({
+      company_id: company.id,
+      group_buy_id: groupBuyId,
+      token,
+      active: true,
+    });
+  } else {
+    await supabase
+      .from("share_links")
+      .update({ active: true })
+      .eq("group_buy_id", groupBuyId);
+  }
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}#share`);
+}
+
+/** 공유 링크 켜기/끄기 */
+export async function toggleShareLink(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const active = String(formData.get("active") ?? "") === "true";
+  if (!groupBuyId) redirect("/group-buys");
+
+  const supabase = await createClient();
+  await supabase
+    .from("share_links")
+    .update({ active })
+    .eq("group_buy_id", groupBuyId);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}#share`);
+}
+
 /** 정산 상태 변경: 검토중 → 승인 → 전달 (2단계 승인) */
 export async function setSettlementStatus(formData: FormData) {
   const groupBuyId = String(formData.get("group_buy_id") ?? "");
