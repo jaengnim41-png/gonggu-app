@@ -33,6 +33,21 @@ export default async function DashboardPage() {
           </p>
         </a>
       </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">데이터 내보내기 · 백업</div>
+          <p className="mt-1 text-xs text-slate-500">
+            제품·공구·주문·정산 전체를 엑셀 한 파일로 내려받습니다. 언제든 빼낼 수 있어 안전해요.
+          </p>
+        </div>
+        <a
+          href="/api/export"
+          className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+        >
+          전체 엑셀 내보내기
+        </a>
+      </div>
     </div>
   );
 }
