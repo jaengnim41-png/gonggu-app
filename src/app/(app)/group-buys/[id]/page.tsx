@@ -12,6 +12,7 @@ import {
   setSettlementStatus,
   createShareLink,
   toggleShareLink,
+  setGroupBuyContacts,
 } from "../actions";
 import { CopyLink } from "@/components/copy-link";
 
@@ -23,7 +24,11 @@ type GroupBuy = {
   end_date: string | null;
   settle_days: number;
   memo: string | null;
+  seller_contact_id: string | null;
+  vendor_contact_id: string | null;
 };
+
+type Contact = { id: string; kind: string; name: string };
 
 type Item = {
   id: string;
@@ -85,6 +90,14 @@ export default async function GroupBuyDetailPage({
     .select("fee_rate, status")
     .eq("group_buy_id", id)
     .maybeSingle<Settlement>();
+
+  const { data: contactData } = await supabase
+    .from("contacts")
+    .select("id, kind, name")
+    .order("name", { ascending: true });
+  const contacts = (contactData ?? []) as Contact[];
+  const sellerContacts = contacts.filter((c) => c.kind === "셀러");
+  const vendorContacts = contacts.filter((c) => c.kind === "벤더");
 
   const { data: shareLink } = await supabase
     .from("share_links")
@@ -181,6 +194,41 @@ export default async function GroupBuyDetailPage({
           기간 {gb.start_date ?? "—"} ~ {gb.end_date ?? "—"} · 정산 종료 후 {gb.settle_days}일
         </div>
         {gb.memo && <p className="mt-2 text-xs text-slate-500">메모: {gb.memo}</p>}
+
+        {/* 진행 셀러/벤더 연결 */}
+        <form action={setGroupBuyContacts} className="mt-4 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-4">
+          <input type="hidden" name="group_buy_id" value={gb.id} />
+          <label className="text-xs font-medium text-slate-600">
+            진행 셀러
+            <select
+              name="seller_contact_id"
+              defaultValue={gb.seller_contact_id ?? ""}
+              className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            >
+              <option value="">— 없음</option>
+              {sellerContacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-slate-600">
+            벤더
+            <select
+              name="vendor_contact_id"
+              defaultValue={gb.vendor_contact_id ?? ""}
+              className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            >
+              <option value="">— 없음</option>
+              {vendorContacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            연결 저장
+          </button>
+          <span className="text-[11px] text-slate-400">셀러/벤더는 왼쪽 메뉴에서 먼저 등록하세요.</span>
+        </form>
       </div>
 
       {/* 비로그인 공유 링크 */}

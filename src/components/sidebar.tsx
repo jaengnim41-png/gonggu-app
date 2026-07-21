@@ -8,6 +8,8 @@ const NAV: { href: string; label: string; icon: string }[] = [
   { href: "/group-buys", label: "공구", icon: "▥" },
   { href: "/products", label: "제품", icon: "▧" },
   { href: "/inventory", label: "재고", icon: "▦" },
+  { href: "/sellers", label: "셀러", icon: "◍" },
+  { href: "/vendors", label: "벤더", icon: "◒" },
 ];
 
 export function Sidebar() {

@@ -191,6 +191,23 @@ export async function saveFeeRate(formData: FormData) {
   redirect(`/group-buys/${groupBuyId}#settlement`);
 }
 
+/** 공구에 진행 셀러/벤더 연결 */
+export async function setGroupBuyContacts(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!groupBuyId) redirect("/group-buys");
+
+  const supabase = await createClient();
+  await supabase
+    .from("group_buys")
+    .update({
+      seller_contact_id: str(formData.get("seller_contact_id")),
+      vendor_contact_id: str(formData.get("vendor_contact_id")),
+    })
+    .eq("id", groupBuyId);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}`);
+}
+
 /** 공유 링크 생성(없으면 토큰 발급) */
 export async function createShareLink(formData: FormData) {
   const groupBuyId = String(formData.get("group_buy_id") ?? "");
