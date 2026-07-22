@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { createContact, deleteContact } from "../contacts/actions";
@@ -145,7 +146,11 @@ export default async function SellersPage({
               <tbody>
                 {sellers.map((s) => (
                   <tr key={s.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
+                    <td className="px-4 py-3">
+                      <Link href={`/contacts/${s.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                        {s.name}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{s.instagram ?? "—"}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{num(s.followers)}</td>
                     <td className="px-4 py-3 text-slate-600">

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { createContact, deleteContact } from "../contacts/actions";
@@ -128,7 +129,11 @@ export default async function VendorsPage({
               <tbody>
                 {vendors.map((v) => (
                   <tr key={v.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-3 font-medium text-slate-900">{v.name}</td>
+                    <td className="px-4 py-3">
+                      <Link href={`/contacts/${v.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                        {v.name}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3 text-xs text-slate-500">{v.contact_info ?? "—"}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{sellerCountByVendor.get(v.id) ?? 0}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{gbCount.get(v.id) ?? 0}</td>

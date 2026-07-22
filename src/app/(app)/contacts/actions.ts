@@ -42,6 +42,35 @@ export async function createContact(formData: FormData) {
   redirect(path);
 }
 
+/** 셀러/벤더 정보 수정 */
+export async function updateContact(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  const detail = `/contacts/${id}`;
+  if (!id) redirect(kind === "벤더" ? "/vendors" : "/sellers");
+
+  const name = str(formData.get("name"));
+  if (!name) redirect(`${detail}?error=input`);
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("contacts")
+    .update({
+      name,
+      instagram: str(formData.get("instagram")),
+      followers: int(formData.get("followers")),
+      contact_info: str(formData.get("contact_info")),
+      linked_vendor_id: str(formData.get("linked_vendor_id")),
+      memo: str(formData.get("memo")),
+    })
+    .eq("id", id);
+  if (error) redirect(`${detail}?error=save`);
+
+  revalidatePath(detail);
+  revalidatePath(kind === "벤더" ? "/vendors" : "/sellers");
+  redirect(`${detail}?saved=1`);
+}
+
 /** 셀러/벤더 삭제 */
 export async function deleteContact(formData: FormData) {
   const id = String(formData.get("id") ?? "");

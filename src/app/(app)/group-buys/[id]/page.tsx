@@ -229,6 +229,20 @@ export default async function GroupBuyDetailPage({
           </button>
           <span className="text-[11px] text-slate-400">셀러/벤더는 왼쪽 메뉴에서 먼저 등록하세요.</span>
         </form>
+        {(gb.seller_contact_id || gb.vendor_contact_id) && (
+          <p className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+            {gb.seller_contact_id && (
+              <Link href={`/contacts/${gb.seller_contact_id}`} className="underline decoration-slate-300 hover:text-indigo-600">
+                셀러 실적 보기 →
+              </Link>
+            )}
+            {gb.vendor_contact_id && (
+              <Link href={`/contacts/${gb.vendor_contact_id}`} className="underline decoration-slate-300 hover:text-indigo-600">
+                벤더 실적 보기 →
+              </Link>
+            )}
+          </p>
+        )}
       </div>
 
       {/* 비로그인 공유 링크 */}
