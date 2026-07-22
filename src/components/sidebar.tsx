@@ -6,14 +6,26 @@ import { usePathname } from "next/navigation";
 const NAV: { href: string; label: string; icon: string }[] = [
   { href: "/dashboard", label: "대시보드", icon: "▤" },
   { href: "/group-buys", label: "공구", icon: "▥" },
+  { href: "/messages", label: "메시지", icon: "✉" },
   { href: "/products", label: "제품", icon: "▧" },
   { href: "/inventory", label: "재고", icon: "▦" },
   { href: "/sellers", label: "셀러", icon: "◍" },
   { href: "/vendors", label: "벤더", icon: "◒" },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  unreadMessages = 0,
+  pendingGuests = 0,
+}: {
+  unreadMessages?: number;
+  pendingGuests?: number;
+}) {
   const pathname = usePathname();
+
+  const badgeFor = (href: string) => {
+    if (href === "/messages") return unreadMessages;
+    return 0;
+  };
 
   return (
     <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-white p-3 sm:block">
@@ -27,6 +39,7 @@ export function Sidebar() {
         {NAV.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
+          const badge = badgeFor(item.href);
           return (
             <Link
               key={item.href}
@@ -40,10 +53,24 @@ export function Sidebar() {
             >
               <span className="w-4 text-center opacity-80">{item.icon}</span>
               {item.label}
+              {badge > 0 && (
+                <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {badge}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
+
+      {pendingGuests > 0 && (
+        <Link
+          href="/guests"
+          className="mt-4 block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+        >
+          승인 대기 {pendingGuests}명 →
+        </Link>
+      )}
     </aside>
   );
 }

@@ -15,6 +15,7 @@ import {
   setGroupBuyContacts,
 } from "../actions";
 import { CopyLink } from "@/components/copy-link";
+import { openThread } from "../../messages/actions";
 
 type GroupBuy = {
   id: string;
@@ -228,6 +229,16 @@ export default async function GroupBuyDetailPage({
             연결 저장
           </button>
           <span className="text-[11px] text-slate-400">셀러/벤더는 왼쪽 메뉴에서 먼저 등록하세요.</span>
+        </form>
+        <form action={openThread} className="mt-3">
+          <input type="hidden" name="kind" value="공구" />
+          <input type="hidden" name="group_buy_id" value={gb.id} />
+          <button
+            type="submit"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ✉ 이 공구 메시지
+          </button>
         </form>
         {(gb.seller_contact_id || gb.vendor_contact_id) && (
           <p className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">

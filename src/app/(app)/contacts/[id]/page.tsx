@@ -1,8 +1,18 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
-import { updateContact, deleteContact } from "../actions";
+import { CopyLink } from "@/components/copy-link";
+import {
+  updateContact,
+  deleteContact,
+  createGuestLink,
+  toggleGuestLink,
+  regenerateGuestLink,
+  setGuestStatus,
+} from "../actions";
+import { openThread } from "../../messages/actions";
 
 type Contact = {
   id: string;
@@ -61,8 +71,15 @@ export default async function ContactDetailPage({
   const { error, saved } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cData }, { data: allContacts }, { data: gbData }, { data: itemData }, { data: orderData }] =
-    await Promise.all([
+  const [
+    { data: cData },
+    { data: allContacts },
+    { data: gbData },
+    { data: itemData },
+    { data: orderData },
+    { data: linkData },
+    { data: guestData },
+  ] = await Promise.all([
       supabase
         .from("contacts")
         .select("id, kind, name, instagram, followers, contact_info, linked_vendor_id, memo")
@@ -74,6 +91,12 @@ export default async function ContactDetailPage({
         .select("id, title, status, start_date, end_date, seller_contact_id, vendor_contact_id"),
       supabase.from("group_buy_items").select("store_product_no, gonggu_price, margin_unit"),
       supabase.from("orders").select("group_buy_id, store_product_no, quantity, order_status"),
+      supabase.from("guest_links").select("token, active").eq("contact_id", id).maybeSingle(),
+      supabase
+        .from("guests")
+        .select("id, display_name, status, requested_at, approved_at, last_seen_at, user_id")
+        .eq("contact_id", id)
+        .order("requested_at", { ascending: false }),
     ]);
 
   const contact = cData as Contact | null;
@@ -136,6 +159,22 @@ export default async function ContactDetailPage({
     return db.localeCompare(da);
   });
 
+  // 초대 링크 · 게스트
+  const link = linkData as { token: string; active: boolean } | null;
+  const guests = (guestData ?? []) as {
+    id: string;
+    display_name: string;
+    status: string;
+    requested_at: string;
+    approved_at: string | null;
+    last_seen_at: string | null;
+    user_id: string | null;
+  }[];
+  const pending = guests.filter((g) => g.status === "대기");
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host") ?? "localhost:3000"}`;
+  const guestUrl = link ? `${origin}/g/${link.token}` : "";
+
   const inputCls =
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
@@ -172,6 +211,25 @@ export default async function ContactDetailPage({
       {contact.contact_info && (
         <p className="mt-1 text-sm text-slate-500">{contact.contact_info}</p>
       )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <form action={openThread}>
+          <input type="hidden" name="kind" value="거래처" />
+          <input type="hidden" name="contact_id" value={contact.id} />
+          <button
+            type="submit"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ✉ 메시지
+          </button>
+        </form>
+        <a
+          href="#guest"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          🔗 초대 링크{pending.length > 0 ? ` · 승인 대기 ${pending.length}` : ""}
+        </a>
+      </div>
 
       {saved && (
         <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700">
@@ -263,6 +321,134 @@ export default async function ContactDetailPage({
                     <td className="px-4 py-3 text-right tabular-nums">{num(qtyByGb.get(g.id) ?? 0)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{won(revByGb.get(g.id) ?? 0)}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-600">{won(marginByGb.get(g.id) ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 초대 링크 · 승인 관리 */}
+      <div id="guest" className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900">초대 링크 (가입 없이 열람)</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          이 링크로 들어온 사람은 <b>승인해야만</b> 볼 수 있습니다. 승인하면 이 {contact.kind}와 진행하는
+          공구의 <b>일정 · 매일 판매현황 · 전달된 정산서 · 메시지</b>만 열람합니다. 링크를 알아도 승인 전에는
+          아무것도 보이지 않습니다.
+        </p>
+
+        {!link ? (
+          <form action={createGuestLink} className="mt-4">
+            <input type="hidden" name="contact_id" value={contact.id} />
+            <button
+              type="submit"
+              className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              초대 링크 만들기
+            </button>
+          </form>
+        ) : (
+          <>
+            <div className="mt-4">
+              <CopyLink url={guestUrl} />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className={`text-xs font-medium ${link.active ? "text-emerald-600" : "text-slate-400"}`}>
+                {link.active ? "● 활성" : "○ 비활성"}
+              </span>
+              <form action={toggleGuestLink}>
+                <input type="hidden" name="contact_id" value={contact.id} />
+                <input type="hidden" name="active" value={link.active ? "false" : "true"} />
+                <button
+                  type="submit"
+                  className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  {link.active ? "링크 비활성화" : "링크 활성화"}
+                </button>
+              </form>
+              <form action={regenerateGuestLink}>
+                <input type="hidden" name="contact_id" value={contact.id} />
+                <button
+                  type="submit"
+                  className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600"
+                >
+                  재발급(기존 링크 무효)
+                </button>
+              </form>
+            </div>
+          </>
+        )}
+
+        <h3 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          접속 요청 ({guests.length})
+        </h3>
+        {guests.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-400">
+            아직 이 링크로 들어온 사람이 없습니다.
+          </p>
+        ) : (
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">이름</th>
+                  <th className="px-3 py-2">상태</th>
+                  <th className="px-3 py-2">요청</th>
+                  <th className="px-3 py-2">최근 접속</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {guests.map((g) => (
+                  <tr key={g.id} className="border-b border-slate-100 last:border-0">
+                    <td className="px-3 py-2 font-medium text-slate-900">
+                      {g.display_name}
+                      {g.user_id && <span className="ml-1.5 text-[10px] text-indigo-600">가입함</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          g.status === "승인"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : g.status === "차단"
+                              ? "bg-rose-50 text-rose-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {g.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      {g.requested_at?.slice(0, 16).replace("T", " ")}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      {g.last_seen_at ? g.last_seen_at.slice(0, 16).replace("T", " ") : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-1.5">
+                        {g.status !== "승인" && (
+                          <form action={setGuestStatus}>
+                            <input type="hidden" name="guest_id" value={g.id} />
+                            <input type="hidden" name="status" value="승인" />
+                            <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
+                            <button className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700">
+                              승인
+                            </button>
+                          </form>
+                        )}
+                        {g.status !== "차단" && (
+                          <form action={setGuestStatus}>
+                            <input type="hidden" name="guest_id" value={g.id} />
+                            <input type="hidden" name="status" value="차단" />
+                            <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
+                            <button className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">
+                              차단
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

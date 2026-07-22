@@ -21,6 +21,34 @@ function cell(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+function two(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * 엑셀의 날짜 칸을 "YYYY-MM-DD HH:mm" 문자열로 바꿉니다.
+ * 스마트스토어 주문 엑셀의 결제일은 숫자(엑셀 일련번호: 1899-12-30 기준 일수)로 들어옵니다.
+ * 예) 46220.94289 → 2026-07-17 22:37
+ */
+export function excelDateToText(v: unknown): string | null {
+  if (v == null || v === "") return null;
+
+  if (v instanceof Date) {
+    return `${v.getFullYear()}-${two(v.getMonth() + 1)}-${two(v.getDate())} ${two(v.getHours())}:${two(v.getMinutes())}`;
+  }
+
+  const raw = cell(v);
+  const serial = Number(raw);
+  // 20000(1954년) ~ 90000(2146년) 범위면 엑셀 일련번호로 본다
+  if (Number.isFinite(serial) && serial > 20000 && serial < 90000) {
+    // 일련번호는 현지 시각 기준이므로 UTC로 만들고 UTC로 읽어야 원래 시각이 나온다
+    const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+    return `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())} ${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`;
+  }
+
+  return raw || null;
+}
+
 /**
  * 스마트스토어 주문 엑셀(첫 시트)을 파싱합니다.
  * 헤더 줄(상품번호·옵션정보·수량 포함)을 자동으로 찾으므로,
@@ -84,7 +112,7 @@ export function parseOrderWorkbook(data: Uint8Array): ParsedOrder[] {
       optionInfo: cell(at(idx.optionInfo)) || null,
       quantity,
       orderStatus: cell(at(idx.orderStatus)) || null,
-      paidAt: cell(at(idx.paidAt)) || null,
+      paidAt: excelDateToText(at(idx.paidAt)),
     });
   }
   return out;
