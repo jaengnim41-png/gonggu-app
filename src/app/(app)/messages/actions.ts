@@ -33,8 +33,8 @@ export async function sendMessage(formData: FormData) {
     .from("thread_reads")
     .upsert({ thread_id: threadId, user_id: user.id, last_read_at: new Date().toISOString() });
 
+  // 같은 화면에 머무르므로 redirect 없이 갱신만 합니다(서버 왕복 1회 절약).
   revalidatePath("/messages");
-  redirect(`/messages?t=${threadId}`);
 }
 
 /** 공구/거래처 화면에서 "메시지" 버튼 → 방을 만들고(있으면 재사용) 이동 */

@@ -85,7 +85,6 @@ export async function addItem(formData: FormData) {
 
   if (error) redirect(`/group-buys/${groupBuyId}?error=save`);
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}`);
 }
 
 export async function deleteItem(formData: FormData) {
@@ -95,7 +94,6 @@ export async function deleteItem(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("group_buy_items").delete().eq("id", id);
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}`);
 }
 
 export async function uploadOrders(formData: FormData) {
@@ -173,7 +171,6 @@ export async function startSettlement(formData: FormData) {
       { onConflict: "group_buy_id" },
     );
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}#settlement`);
 }
 
 /** 수수료율 저장 (계산식 편집) */
@@ -188,7 +185,6 @@ export async function saveFeeRate(formData: FormData) {
     .update({ fee_rate: rate ?? 0, updated_at: new Date().toISOString() })
     .eq("group_buy_id", groupBuyId);
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}#settlement`);
 }
 
 /** 공구에 진행 셀러/벤더 연결 */
@@ -205,7 +201,6 @@ export async function setGroupBuyContacts(formData: FormData) {
     })
     .eq("id", groupBuyId);
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}`);
 }
 
 /** 공유 링크 생성(없으면 토큰 발급) */
@@ -238,7 +233,6 @@ export async function createShareLink(formData: FormData) {
       .eq("group_buy_id", groupBuyId);
   }
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}#share`);
 }
 
 /** 공유 링크 켜기/끄기 */
@@ -253,7 +247,6 @@ export async function toggleShareLink(formData: FormData) {
     .update({ active })
     .eq("group_buy_id", groupBuyId);
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}#share`);
 }
 
 /** 정산 상태 변경: 검토중 → 승인 → 전달 (2단계 승인) */
@@ -270,5 +263,4 @@ export async function setSettlementStatus(formData: FormData) {
     .update({ status, updated_at: new Date().toISOString() })
     .eq("group_buy_id", groupBuyId);
   revalidatePath(`/group-buys/${groupBuyId}`);
-  redirect(`/group-buys/${groupBuyId}#settlement`);
 }

@@ -151,7 +151,6 @@ export async function addProposalItem(formData: FormData) {
   });
 
   revalidatePath(`/proposals/${proposalId}`);
-  redirect(`/proposals/${proposalId}`);
 }
 
 /** 제안서 품목 열람 on/off */
@@ -164,7 +163,6 @@ export async function toggleItemVisible(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("proposal_items").update({ visible: next }).eq("id", id);
   revalidatePath(`/proposals/${proposalId}`);
-  redirect(`/proposals/${proposalId}`);
 }
 
 /** 제안서 품목 삭제 */
@@ -174,7 +172,6 @@ export async function deleteItem(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("proposal_items").delete().eq("id", id);
   revalidatePath(`/proposals/${proposalId}`);
-  redirect(`/proposals/${proposalId}`);
 }
 
 /** 공유 링크 on/off */
@@ -184,7 +181,6 @@ export async function toggleProposal(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("proposals").update({ active: next }).eq("id", id);
   revalidatePath(`/proposals/${id}`);
-  redirect(`/proposals/${id}`);
 }
 
 /** 제안서 삭제 */

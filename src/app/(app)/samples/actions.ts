@@ -52,7 +52,6 @@ export async function createSample(formData: FormData) {
   if (error) redirect(`${back}?error=save`);
 
   revalidatePath(back);
-  redirect(back);
 }
 
 /** 회수 여부 토글 (가끔 쓰는 기능) */
@@ -69,7 +68,6 @@ export async function toggleReturned(formData: FormData) {
     .eq("id", id);
 
   revalidatePath(back);
-  redirect(back);
 }
 
 /** 메모만 빠르게 수정 */
@@ -82,7 +80,6 @@ export async function saveSampleMemo(formData: FormData) {
   await supabase.from("sample_shipments").update({ memo: str(formData.get("memo")) }).eq("id", id);
 
   revalidatePath(back);
-  redirect(back);
 }
 
 /** 샘플 기록 삭제 */
@@ -95,5 +92,4 @@ export async function deleteSample(formData: FormData) {
   await supabase.from("sample_shipments").delete().eq("id", id);
 
   revalidatePath(back);
-  redirect(back);
 }

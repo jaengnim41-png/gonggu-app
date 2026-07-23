@@ -66,7 +66,6 @@ export async function createGuestLink(formData: FormData) {
     });
   }
   revalidatePath(`/contacts/${contactId}`);
-  redirect(`/contacts/${contactId}#guest`);
 }
 
 /** 초대 링크 켜기/끄기 */
@@ -76,7 +75,6 @@ export async function toggleGuestLink(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("guest_links").update({ active: next }).eq("contact_id", contactId);
   revalidatePath(`/contacts/${contactId}`);
-  redirect(`/contacts/${contactId}#guest`);
 }
 
 /** 초대 링크 재발급 — 기존 링크는 즉시 무효가 된다 */
@@ -88,7 +86,6 @@ export async function regenerateGuestLink(formData: FormData) {
     .update({ token: crypto.randomUUID().replace(/-/g, ""), active: true })
     .eq("contact_id", contactId);
   revalidatePath(`/contacts/${contactId}`);
-  redirect(`/contacts/${contactId}#guest`);
 }
 
 /** 게스트 승인 / 차단 / 대기로 되돌리기 */
@@ -105,7 +102,6 @@ export async function setGuestStatus(formData: FormData) {
     .eq("id", guestId);
 
   revalidatePath(back || "/guests");
-  redirect(back || "/guests");
 }
 
 /** 셀러/벤더 정보 수정 */
