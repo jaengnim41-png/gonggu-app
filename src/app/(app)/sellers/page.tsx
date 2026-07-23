@@ -11,6 +11,7 @@ type Contact = {
   followers: number | null;
   contact_info: string | null;
   linked_vendor_id: string | null;
+  memo: string | null;
 };
 type GB = { id: string; status: string; seller_contact_id: string | null };
 type Item = { store_product_no: string | null; gonggu_price: number | null };
@@ -33,7 +34,7 @@ export default async function SellersPage({
 
   const [{ data: cData }, { data: gbData }, { data: itemData }, { data: orderData }] =
     await Promise.all([
-      supabase.from("contacts").select("id, kind, name, instagram, followers, contact_info, linked_vendor_id").order("created_at", { ascending: false }),
+      supabase.from("contacts").select("id, kind, name, instagram, followers, contact_info, linked_vendor_id, memo").order("created_at", { ascending: false }),
       supabase.from("group_buys").select("id, status, seller_contact_id"),
       supabase.from("group_buy_items").select("store_product_no, gonggu_price"),
       supabase.from("orders").select("group_buy_id, store_product_no, quantity, order_status"),
@@ -150,6 +151,11 @@ export default async function SellersPage({
                       <Link href={`/contacts/${s.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
                         {s.name}
                       </Link>
+                      {s.memo && (
+                        <p className="mt-0.5 max-w-56 truncate text-xs text-slate-400" title={s.memo}>
+                          {s.memo}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{s.instagram ?? "—"}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{num(s.followers)}</td>

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { CopyLink } from "@/components/copy-link";
+import { SampleForm } from "@/components/sample-form";
+import { createSample } from "../../samples/actions";
 import {
   updateContact,
   deleteContact,
@@ -79,6 +81,9 @@ export default async function ContactDetailPage({
     { data: orderData },
     { data: linkData },
     { data: guestData },
+    { data: sampleData },
+    { data: prodData },
+    { data: optData },
   ] = await Promise.all([
       supabase
         .from("contacts")
@@ -97,6 +102,13 @@ export default async function ContactDetailPage({
         .select("id, display_name, status, requested_at, approved_at, last_seen_at, user_id")
         .eq("contact_id", id)
         .order("requested_at", { ascending: false }),
+      supabase
+        .from("sample_shipments")
+        .select("id, product_id, product_option_id, item_text, quantity, sent_at, courier, tracking_no, returned, memo")
+        .eq("contact_id", id)
+        .order("sent_at", { ascending: false }),
+      supabase.from("products").select("id, name"),
+      supabase.from("product_options").select("id, name"),
     ]);
 
   const contact = cData as Contact | null;
@@ -175,6 +187,33 @@ export default async function ContactDetailPage({
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host") ?? "localhost:3000"}`;
   const guestUrl = link ? `${origin}/g/${link.token}` : "";
 
+  // 샘플 이력
+  const samples = (sampleData ?? []) as {
+    id: string;
+    product_id: string | null;
+    product_option_id: string | null;
+    item_text: string | null;
+    quantity: number;
+    sent_at: string;
+    courier: string | null;
+    tracking_no: string | null;
+    returned: boolean;
+    memo: string | null;
+  }[];
+  const prodName = new Map(((prodData ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
+  const optName = new Map(((optData ?? []) as { id: string; name: string }[]).map((o) => [o.id, o.name]));
+  const sampleItems: { value: string; label: string }[] = [];
+  for (const [pid, pname] of prodName) sampleItems.push({ value: `p:${pid}`, label: pname });
+  const sampleLabel = (s: (typeof samples)[number]) => {
+    if (s.product_option_id) {
+      return [s.product_id ? prodName.get(s.product_id) : null, optName.get(s.product_option_id)]
+        .filter(Boolean)
+        .join(" · ") || s.item_text || "—";
+    }
+    if (s.product_id) return prodName.get(s.product_id) ?? s.item_text ?? "—";
+    return s.item_text ?? "—";
+  };
+
   const inputCls =
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
@@ -210,6 +249,11 @@ export default async function ContactDetailPage({
       </div>
       {contact.contact_info && (
         <p className="mt-1 text-sm text-slate-500">{contact.contact_info}</p>
+      )}
+      {contact.memo && (
+        <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          📝 {contact.memo}
+        </p>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -327,6 +371,65 @@ export default async function ContactDetailPage({
             </table>
           </div>
         )}
+      </div>
+
+      {/* 샘플 이력 */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-900">샘플 발송 ({samples.length})</h2>
+          <Link href="/samples" className="text-xs text-slate-500 underline decoration-slate-300 hover:text-indigo-600">
+            전체 보기 →
+          </Link>
+        </div>
+        {samples.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-400">
+            이 {contact.kind}에게 보낸 샘플 기록이 없습니다.
+          </p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">발송일</th>
+                  <th className="px-3 py-2">품목</th>
+                  <th className="px-3 py-2 text-right">수량</th>
+                  <th className="px-3 py-2">메모</th>
+                  <th className="px-3 py-2 text-center">회수</th>
+                </tr>
+              </thead>
+              <tbody>
+                {samples.map((s) => (
+                  <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                    <td className="whitespace-nowrap px-3 py-2 text-slate-600">{s.sent_at}</td>
+                    <td className="px-3 py-2 text-slate-700">{sampleLabel(s)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{s.quantity}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{s.memo ?? "—"}</td>
+                    <td className="px-3 py-2 text-center text-xs">
+                      {s.returned ? (
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700">회수됨</span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <details className="mt-4 border-t border-slate-100 pt-4">
+          <summary className="cursor-pointer text-sm font-semibold text-indigo-700">
+            ＋ 이 {contact.kind}에게 샘플 보낸 기록 추가
+          </summary>
+          <SampleForm
+            action={createSample}
+            contacts={[]}
+            items={sampleItems}
+            back={`/contacts/${contact.id}`}
+            fixedContactId={contact.id}
+          />
+        </details>
       </div>
 
       {/* 초대 링크 · 승인 관리 */}

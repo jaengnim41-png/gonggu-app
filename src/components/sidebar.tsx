@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; icon: string }[] = [
   { href: "/inventory", label: "재고", icon: "▦" },
   { href: "/sellers", label: "셀러", icon: "◍" },
   { href: "/vendors", label: "벤더", icon: "◒" },
+  { href: "/samples", label: "샘플", icon: "◈" },
 ];
 
 export function Sidebar({
