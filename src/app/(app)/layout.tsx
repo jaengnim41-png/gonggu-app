@@ -4,29 +4,32 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/sidebar";
 import { signOut } from "./actions";
 
-/** 사이드바 배지용: 안읽은 메시지 수 · 승인 대기 게스트 수 */
-async function getBadges(userId: string) {
+type BadgeMsg = { thread_id: string; author_user_id: string | null; created_at: string };
+type BadgeRead = { thread_id: string; last_read_at: string };
+
+/** 사이드바 배지용: 안읽은 메시지 수 · 승인 대기 게스트 수 (프로필 조회와 동시에 실행) */
+async function fetchBadgeData() {
   const supabase = await createClient();
-  const [{ data: msgs }, { data: reads }, { count: pending }] = await Promise.all([
+  return Promise.all([
     supabase
       .from("messages")
       .select("thread_id, author_user_id, created_at")
       .order("created_at", { ascending: false })
-      .limit(1000),
+      .limit(300),
     supabase.from("thread_reads").select("thread_id, last_read_at"),
     supabase.from("guests").select("id", { count: "exact", head: true }).eq("status", "대기"),
   ]);
+}
 
-  const readAt = new Map(
-    (reads ?? []).map((r: { thread_id: string; last_read_at: string }) => [r.thread_id, r.last_read_at])
-  );
+function countUnread(msgs: BadgeMsg[], reads: BadgeRead[], userId: string) {
+  const readAt = new Map(reads.map((r) => [r.thread_id, r.last_read_at]));
   let unread = 0;
-  for (const m of (msgs ?? []) as { thread_id: string; author_user_id: string | null; created_at: string }[]) {
+  for (const m of msgs) {
     if (m.author_user_id === userId) continue;
     const seen = readAt.get(m.thread_id);
     if (!seen || m.created_at > seen) unread++;
   }
-  return { unread, pending: pending ?? 0 };
+  return unread;
 }
 
 export default async function AppLayout({
@@ -34,11 +37,17 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, company } = await getSessionProfile();
+  // 프로필과 배지 데이터를 동시에 요청합니다(순차 왕복 제거).
+  const [{ user, company }, badges] = await Promise.all([
+    getSessionProfile(),
+    fetchBadgeData(),
+  ]);
   if (!user) redirect("/");
   if (!company) redirect("/onboarding");
 
-  const { unread, pending } = await getBadges(user.id);
+  const [{ data: msgs }, { data: reads }, { count: pendingCount }] = badges;
+  const unread = countUnread((msgs ?? []) as BadgeMsg[], (reads ?? []) as BadgeRead[], user.id);
+  const pending = pendingCount ?? 0;
 
   return (
     <div className="flex min-h-full">
