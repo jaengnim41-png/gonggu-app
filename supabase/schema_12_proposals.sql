@@ -94,6 +94,7 @@ as $$
 declare
   v_prop public.proposals;
   v_company uuid;
+  v_items jsonb;
   v_result jsonb;
 begin
   select * into v_prop from public.proposals where token = p_token and active = true;
@@ -101,6 +102,26 @@ begin
     return null;
   end if;
   v_company := v_prop.company_id;
+
+  -- 열람 켜진 상품만, 담은 순서대로
+  select coalesce(
+           jsonb_agg(
+             jsonb_build_object(
+               'name',         i.name,
+               'option_label', i.option_label,
+               'detail_url',   i.detail_url,
+               'normal_price', i.normal_price,
+               'gonggu_price', i.gonggu_price,
+               'fee_rate',     i.fee_rate
+             )
+             order by i.sort_order, i.created_at
+           ),
+           '[]'::jsonb
+         )
+    into v_items
+    from public.proposal_items i
+   where i.proposal_id = v_prop.id
+     and i.visible = true;
 
   select jsonb_build_object(
     'proposal', jsonb_build_object(
@@ -118,13 +139,7 @@ begin
       (select to_jsonb(s) from public.proposal_settings s where s.company_id = v_company),
       '{}'::jsonb
     ),
-    'items', coalesce((
-      select jsonb_agg(to_jsonb(x) order by x.sort_order) from (
-        select name, option_label, detail_url, normal_price, gonggu_price, fee_rate
-          from public.proposal_items
-         where proposal_id = v_prop.id and visible = true
-      ) x
-    ), '[]'::jsonb)
+    'items', v_items
   ) into v_result;
 
   return v_result;
