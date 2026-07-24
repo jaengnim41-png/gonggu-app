@@ -157,10 +157,12 @@ export default async function ProductDetailPage({
               {options.map((o) => (
                 <tr key={o.id} className="border-b border-slate-100 last:border-0">
                   <td className="px-4 py-3 text-slate-900">
-                    {o.name}
                     {o.option_key && (
-                      <span className="ml-2 text-xs text-slate-400">{o.option_key}</span>
+                      <span className="mr-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500">
+                        {o.option_key}
+                      </span>
                     )}
+                    {o.name}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.normal_price)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.gonggu_price)}</td>
