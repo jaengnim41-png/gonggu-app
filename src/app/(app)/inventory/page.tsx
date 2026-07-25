@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { addStockIn, uploadInventoryOrders, linkOption } from "./actions";
+import { CatalogTabs } from "@/components/catalog-tabs";
 
 type OptionRow = {
   id: string;
@@ -88,6 +89,7 @@ export default async function InventoryPage({
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
+      <CatalogTabs />
       <h1 className="text-lg font-bold text-slate-900">재고</h1>
       <p className="mt-1 text-sm text-slate-500">
         전체 주문 파일을 올리면 옵션별 재고가 자동 차감됩니다. (공구 판매집계와 분리)

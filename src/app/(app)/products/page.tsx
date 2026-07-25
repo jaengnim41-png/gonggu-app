@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createProduct, bulkUploadProducts } from "./actions";
 import { ProductTable, type ProductRow } from "./product-table";
+import { CatalogTabs } from "@/components/catalog-tabs";
 
 type Raw = {
   id: string;
@@ -45,8 +46,9 @@ export default async function ProductsPage({
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-10">
+      <CatalogTabs />
       <div>
-        <h1 className="text-lg font-bold text-slate-900">제품</h1>
+        <h1 className="text-lg font-bold text-slate-900">카탈로그</h1>
         <p className="mt-1 text-sm text-slate-500">
           대분류(제품)로 묶고 옵션으로 나눠 관리합니다. 순서 변경·수정·엑셀 일괄 등록을 지원합니다.
         </p>
