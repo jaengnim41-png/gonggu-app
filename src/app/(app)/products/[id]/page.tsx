@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isLive } from "@/lib/orders/parse";
 import { addOption, deleteOption } from "../actions";
 
 type Product = {
@@ -53,6 +54,28 @@ export default async function ProductDetailPage({
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   const options = (optData ?? []) as Option[];
+
+  // 옵션별 재고(가용 = 입고 − 판매) 계산
+  const optionIds = options.map((o) => o.id);
+  const [{ data: siData }, { data: ioData }] = await Promise.all([
+    optionIds.length
+      ? supabase.from("stock_ins").select("product_option_id, quantity").in("product_option_id", optionIds)
+      : Promise.resolve({ data: [] as { product_option_id: string; quantity: number }[] }),
+    optionIds.length
+      ? supabase
+          .from("inventory_orders")
+          .select("product_option_id, quantity, order_status")
+          .in("product_option_id", optionIds)
+      : Promise.resolve({ data: [] as { product_option_id: string | null; quantity: number; order_status: string | null }[] }),
+  ]);
+  const availByOpt = new Map<string, number>();
+  for (const s of (siData ?? []) as { product_option_id: string; quantity: number }[]) {
+    availByOpt.set(s.product_option_id, (availByOpt.get(s.product_option_id) ?? 0) + (s.quantity ?? 0));
+  }
+  for (const o of (ioData ?? []) as { product_option_id: string | null; quantity: number; order_status: string | null }[]) {
+    if (!o.product_option_id || !isLive(o.order_status)) continue;
+    availByOpt.set(o.product_option_id, (availByOpt.get(o.product_option_id) ?? 0) - (o.quantity ?? 0));
+  }
 
   const inputCls =
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
@@ -150,6 +173,7 @@ export default async function ProductDetailPage({
                 <th className="px-4 py-3 text-right">정상가</th>
                 <th className="px-4 py-3 text-right">공구가</th>
                 <th className="px-4 py-3 text-right">공급가</th>
+                <th className="px-4 py-3 text-right">가용재고</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -167,6 +191,9 @@ export default async function ProductDetailPage({
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.normal_price)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.gonggu_price)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.supply_price)}</td>
+                  <td className={"px-4 py-3 text-right font-semibold tabular-nums " + ((availByOpt.get(o.id) ?? 0) <= 10 ? "text-rose-600" : "text-emerald-600")}>
+                    {(availByOpt.get(o.id) ?? 0).toLocaleString("ko-KR")}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <form action={deleteOption}>
                       <input type="hidden" name="id" value={o.id} />

@@ -3,10 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { addStockIn, uploadInventoryOrders, linkOption } from "./actions";
 import { CatalogTabs } from "@/components/catalog-tabs";
+import { StockTable, type StockGroup } from "./stock-table";
 
 type OptionRow = {
   id: string;
   name: string;
+  option_key: string | null;
   product_id: string;
   products: { name: string } | { name: string }[] | null;
 };
@@ -37,7 +39,7 @@ export default async function InventoryPage({
 
   const [{ data: optData }, { data: siData }, { data: ioData }] =
     await Promise.all([
-      supabase.from("product_options").select("id, name, product_id, products(name)"),
+      supabase.from("product_options").select("id, name, option_key, product_id, sort_order, products(name)").order("sort_order"),
       supabase.from("stock_ins").select("product_option_id, quantity"),
       supabase
         .from("inventory_orders")
@@ -74,13 +76,28 @@ export default async function InventoryPage({
   }
   const unmatchedRows = [...unmatched.values()].sort((a, b) => b.qty - a.qty);
 
-  // 제품별로 옵션 묶기
+  // 제품별로 옵션 묶기(재고 현황용) — 대분류별 합계 포함
   const byProduct = new Map<string, { name: string; opts: OptionRow[] }>();
   for (const o of options) {
     const g = byProduct.get(o.product_id) ?? { name: productName(o.products), opts: [] };
     g.opts.push(o);
     byProduct.set(o.product_id, g);
   }
+  const stockGroups: StockGroup[] = [...byProduct.entries()].map(([productId, g]) => {
+    const opts = g.opts.map((o) => {
+      const inQ = inByOpt.get(o.id) ?? 0;
+      const soldQ = soldByOpt.get(o.id) ?? 0;
+      return { id: o.id, name: o.name, option_key: (o as OptionRow & { option_key?: string | null }).option_key ?? null, inQ, soldQ, avail: inQ - soldQ };
+    });
+    return {
+      productId,
+      name: g.name,
+      options: opts,
+      totalIn: opts.reduce((s, x) => s + x.inQ, 0),
+      totalSold: opts.reduce((s, x) => s + x.soldQ, 0),
+      totalAvail: opts.reduce((s, x) => s + x.avail, 0),
+    };
+  });
 
   const inputCls =
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
@@ -220,58 +237,10 @@ export default async function InventoryPage({
         </p>
       )}
 
-      {/* 재고 현황 */}
-      <h2 className="mt-8 text-sm font-bold text-slate-900">재고 현황</h2>
-      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {options.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-slate-400">
-            등록된 제품 옵션이 없습니다.
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">제품 / 옵션</th>
-                <th className="px-4 py-3 text-right">입고</th>
-                <th className="px-4 py-3 text-right">판매</th>
-                <th className="px-4 py-3 text-right">가용</th>
-                <th className="px-4 py-3">상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...byProduct.values()].map((g) =>
-                g.opts.map((o, i) => {
-                  const inQ = inByOpt.get(o.id) ?? 0;
-                  const soldQ = soldByOpt.get(o.id) ?? 0;
-                  const avail = inQ - soldQ;
-                  const low = avail <= 10;
-                  return (
-                    <tr key={o.id} className="border-b border-slate-100 last:border-0">
-                      <td className="px-4 py-3">
-                        {i === 0 && <span className="font-semibold text-slate-900">{g.name}</span>}
-                        <span className={i === 0 ? "ml-2 text-slate-600" : "text-slate-600"}>{o.name}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{qty(inQ)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{qty(soldQ)}</td>
-                      <td className={"px-4 py-3 text-right font-semibold tabular-nums " + (low ? "text-rose-600" : "text-emerald-600")}>
-                        {qty(avail)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={"rounded-full px-2.5 py-0.5 text-xs font-semibold " + (low ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700")}>
-                          {low ? "부족" : "충분"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                }),
-              )}
-            </tbody>
-          </table>
-        )}
+      {/* 재고 현황 (대분류 접기/펼치기) */}
+      <div className="mt-8">
+        <StockTable groups={stockGroups} />
       </div>
-      <p className="mt-2 text-xs text-slate-400">
-        가용 = 입고 − 판매(전체 주문 업로드에서 자동 차감). 재고는 브랜드가 자기 제품 기준으로 관리합니다.
-      </p>
     </div>
   );
 }
