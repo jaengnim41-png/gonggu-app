@@ -234,15 +234,15 @@ export async function bulkUploadProducts(formData: FormData) {
       if (!row.optionName) continue;
       const existing = optByName.get(row.optionName);
       if (existing) {
-        await supabase
-          .from("product_options")
-          .update({
-            option_key: row.sku,
-            normal_price: row.normalPrice,
-            gonggu_price: row.gongguPrice,
-            supply_price: row.supplyPrice,
-          })
-          .eq("id", existing.id);
+        // 값이 있는 칸만 갱신 — 빈 칸이 기존 가격을 지우지 않도록
+        const patch: Record<string, unknown> = {};
+        if (row.sku) patch.option_key = row.sku;
+        if (row.normalPrice != null) patch.normal_price = row.normalPrice;
+        if (row.gongguPrice != null) patch.gonggu_price = row.gongguPrice;
+        if (row.supplyPrice != null) patch.supply_price = row.supplyPrice;
+        if (Object.keys(patch).length) {
+          await supabase.from("product_options").update(patch).eq("id", existing.id);
+        }
       } else {
         optOrder += 1;
         await supabase.from("product_options").insert({
