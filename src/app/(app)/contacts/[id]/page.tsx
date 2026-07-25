@@ -13,6 +13,10 @@ import {
   toggleGuestLink,
   regenerateGuestLink,
   setGuestStatus,
+  linkContacts,
+  unlinkContacts,
+  addVendorManager,
+  deleteVendorManager,
 } from "../actions";
 import { openThread } from "../../messages/actions";
 
@@ -23,7 +27,8 @@ type Contact = {
   instagram: string | null;
   followers: number | null;
   contact_info: string | null;
-  linked_vendor_id: string | null;
+  phone: string | null;
+  address: string | null;
   memo: string | null;
 };
 type GB = {
@@ -84,13 +89,15 @@ export default async function ContactDetailPage({
     { data: sampleData },
     { data: prodData },
     { data: optData },
+    { data: clinkData },
+    { data: managerData },
   ] = await Promise.all([
       supabase
         .from("contacts")
-        .select("id, kind, name, instagram, followers, contact_info, linked_vendor_id, memo")
+        .select("id, kind, name, instagram, followers, contact_info, phone, address, memo")
         .eq("id", id)
         .maybeSingle(),
-      supabase.from("contacts").select("id, kind, name, linked_vendor_id").order("name"),
+      supabase.from("contacts").select("id, kind, name").order("sort_order"),
       supabase
         .from("group_buys")
         .select("id, title, status, start_date, end_date, seller_contact_id, vendor_contact_id"),
@@ -109,6 +116,8 @@ export default async function ContactDetailPage({
         .order("sent_at", { ascending: false }),
       supabase.from("products").select("id, name"),
       supabase.from("product_options").select("id, name"),
+      supabase.from("contact_links").select("seller_id, vendor_id"),
+      supabase.from("vendor_managers").select("id, name, phone, memo").eq("vendor_id", id).order("sort_order"),
     ]);
 
   const contact = cData as Contact | null;
@@ -116,10 +125,21 @@ export default async function ContactDetailPage({
 
   const isVendor = contact.kind === "벤더";
   const listPath = isVendor ? "/vendors" : "/sellers";
-  const others = (allContacts ?? []) as { id: string; kind: string; name: string; linked_vendor_id: string | null }[];
+  const others = (allContacts ?? []) as { id: string; kind: string; name: string }[];
   const vendors = others.filter((c) => c.kind === "벤더" && c.id !== contact.id);
-  const myVendor = vendors.find((v) => v.id === contact.linked_vendor_id) ?? null;
-  const mySellers = others.filter((c) => c.kind === "셀러" && c.linked_vendor_id === contact.id);
+  const allSellers = others.filter((c) => c.kind === "셀러");
+  const nameById = new Map(others.map((c) => [c.id, c.name]));
+
+  // 이 거래처의 연결(양방향): 셀러면 연결된 벤더, 벤더면 연결된 셀러
+  const links = (clinkData ?? []) as { seller_id: string; vendor_id: string }[];
+  const myLinks = isVendor
+    ? links.filter((l) => l.vendor_id === contact.id).map((l) => ({ otherId: l.seller_id, name: nameById.get(l.seller_id) ?? "?" }))
+    : links.filter((l) => l.seller_id === contact.id).map((l) => ({ otherId: l.vendor_id, name: nameById.get(l.vendor_id) ?? "?" }));
+  const linkedIds = new Set(myLinks.map((l) => l.otherId));
+  const linkableOthers = isVendor
+    ? allSellers.filter((s) => !linkedIds.has(s.id))
+    : vendors.filter((v) => !linkedIds.has(v.id));
+  const managers = (managerData ?? []) as { id: string; name: string; phone: string | null; memo: string | null }[];
 
   // 이 거래처가 연결된 공구
   const mine = ((gbData ?? []) as GB[]).filter((g) =>
@@ -238,15 +258,14 @@ export default async function ContactDetailPage({
         {contact.followers != null && (
           <span className="text-xs text-slate-500">팔로워 {num(contact.followers)}</span>
         )}
-        {!isVendor && myVendor && (
-          <Link
-            href={`/contacts/${myVendor.id}`}
-            className="text-xs text-slate-500 underline decoration-slate-300 hover:text-indigo-600"
-          >
-            소속 벤더: {myVendor.name}
-          </Link>
-        )}
       </div>
+      {(contact.phone || contact.address) && (
+        <p className="mt-1 text-sm text-slate-500">
+          {contact.phone && <span>📞 {contact.phone}</span>}
+          {contact.phone && contact.address && <span className="mx-1.5 text-slate-300">·</span>}
+          {contact.address && <span>📍 {contact.address}</span>}
+        </p>
+      )}
       {contact.contact_info && (
         <p className="mt-1 text-sm text-slate-500">{contact.contact_info}</p>
       )}
@@ -560,27 +579,79 @@ export default async function ContactDetailPage({
         )}
       </div>
 
-      {/* 벤더면: 소속 셀러 */}
+      {/* 연결 관리 (양방향: 셀러↔벤더 어디서든) */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900">
+          연결 {isVendor ? "셀러" : "벤더"} ({myLinks.length})
+        </h2>
+        <p className="mt-1 text-xs text-slate-500">
+          여기서 연결하면 {isVendor ? "셀러" : "벤더"} 쪽에도 자동으로 연결됩니다.
+        </p>
+        {myLinks.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {myLinks.map((l) => (
+              <span key={l.otherId} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-sm text-slate-700">
+                <Link href={`/contacts/${l.otherId}`} className="hover:text-indigo-600">{l.name}</Link>
+                <form action={unlinkContacts} className="inline">
+                  <input type="hidden" name="seller_id" value={isVendor ? l.otherId : contact.id} />
+                  <input type="hidden" name="vendor_id" value={isVendor ? contact.id : l.otherId} />
+                  <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
+                  <button className="text-slate-400 hover:text-rose-600" title="연결 해제">✕</button>
+                </form>
+              </span>
+            ))}
+          </div>
+        )}
+        {linkableOthers.length > 0 && (
+          <form action={linkContacts} className="mt-3 flex flex-wrap items-center gap-2">
+            <input type="hidden" name="seller_id" value={isVendor ? "" : contact.id} />
+            <input type="hidden" name="vendor_id" value={isVendor ? contact.id : ""} />
+            <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
+            <select name={isVendor ? "seller_id" : "vendor_id"} defaultValue="" required className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              <option value="" disabled>{isVendor ? "셀러 선택" : "벤더 선택"}…</option>
+              {linkableOthers.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+            <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">＋ 연결</button>
+          </form>
+        )}
+      </div>
+
+      {/* 벤더 담당자 */}
       {isVendor && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">소속 셀러 ({mySellers.length})</h2>
-          {mySellers.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-400">
-              연결된 셀러가 없습니다. 셀러 등록·수정에서 이 벤더를 선택하세요.
-            </p>
-          ) : (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {mySellers.map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/contacts/${s.id}`}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-indigo-300 hover:text-indigo-700"
-                >
-                  {s.name}
-                </Link>
-              ))}
+          <h2 className="text-sm font-semibold text-slate-900">담당자 ({managers.length})</h2>
+          {managers.length > 0 && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {managers.map((m) => (
+                    <tr key={m.id} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 pr-3 font-medium text-slate-800">{m.name}</td>
+                      <td className="py-2 pr-3 text-slate-500">{m.phone ?? "—"}</td>
+                      <td className="py-2 pr-3 text-xs text-slate-400">{m.memo ?? ""}</td>
+                      <td className="py-2 text-right">
+                        <form action={deleteVendorManager}>
+                          <input type="hidden" name="id" value={m.id} />
+                          <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
+                          <button className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+          <form action={addVendorManager} className="mt-3 grid gap-2 sm:grid-cols-4">
+            <input type="hidden" name="vendor_id" value={contact.id} />
+            <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
+            <input name="name" required placeholder="담당자 이름 *" className={inputCls} />
+            <input name="phone" placeholder="연락처" className={inputCls} />
+            <input name="memo" placeholder="역할·메모" className={inputCls} />
+            <button className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">담당자 추가</button>
+          </form>
         </div>
       )}
 
@@ -604,20 +675,15 @@ export default async function ContactDetailPage({
                 팔로워 수
                 <input name="followers" inputMode="numeric" defaultValue={contact.followers ?? ""} className={inputCls} />
               </label>
-              <label className="text-sm font-medium text-slate-700">
-                연결 벤더
-                <select name="linked_vendor_id" defaultValue={contact.linked_vendor_id ?? ""} className={inputCls}>
-                  <option value="">단독 (벤더 없음)</option>
-                  {vendors.map((v) => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
-                  ))}
-                </select>
-              </label>
             </>
           )}
           <label className="text-sm font-medium text-slate-700">
-            연락처·담당
-            <input name="contact_info" defaultValue={contact.contact_info ?? ""} className={inputCls} />
+            연락처(택배)
+            <input name="phone" defaultValue={contact.phone ?? ""} placeholder="010-0000-0000" className={inputCls} />
+          </label>
+          <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+            주소(택배 발송)
+            <input name="address" defaultValue={contact.address ?? ""} className={inputCls} />
           </label>
           <label className="text-sm font-medium text-slate-700 sm:col-span-2">
             메모
