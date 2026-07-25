@@ -604,8 +604,8 @@ export default async function ContactDetailPage({
         )}
         {linkableOthers.length > 0 && (
           <form action={linkContacts} className="mt-3 flex flex-wrap items-center gap-2">
-            <input type="hidden" name="seller_id" value={isVendor ? "" : contact.id} />
-            <input type="hidden" name="vendor_id" value={isVendor ? contact.id : ""} />
+            {/* 고정된 쪽만 hidden으로 — select와 이름이 겹치지 않도록 */}
+            <input type="hidden" name={isVendor ? "vendor_id" : "seller_id"} value={contact.id} />
             <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
             <select name={isVendor ? "seller_id" : "vendor_id"} defaultValue="" required className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="" disabled>{isVendor ? "셀러 선택" : "벤더 선택"}…</option>
