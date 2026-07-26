@@ -83,8 +83,41 @@ export async function addProposalItem(formData: FormData) {
     .maybeSingle();
   const feeDefault = prop?.fee_rate_default ?? 0.25;
 
-  // "o:<옵션id>:<제품id>" 또는 "p:<제품id>" 또는 빈값(직접입력)
   const item = String(formData.get("item") ?? "");
+
+  // "c:<제품id>" = 대분류 전체 담기 → 하위 옵션을 한 번에 추가
+  if (item.startsWith("c:")) {
+    const pid = item.slice(2);
+    const [{ data: p }, { data: opts }, { count }] = await Promise.all([
+      supabase.from("products").select("name, detail_url, normal_price").eq("id", pid).maybeSingle(),
+      supabase
+        .from("product_options")
+        .select("name, normal_price, gonggu_price")
+        .eq("product_id", pid)
+        .order("sort_order"),
+      supabase.from("proposal_items").select("id", { count: "exact", head: true }).eq("proposal_id", proposalId),
+    ]);
+    if (p && opts && opts.length) {
+      let order = count ?? 0;
+      const rows = opts.map((o) => ({
+        proposal_id: proposalId,
+        product_id: pid,
+        product_option_id: null,
+        name: p.name,
+        option_label: o.name,
+        detail_url: p.detail_url,
+        normal_price: o.normal_price ?? p.normal_price,
+        gonggu_price: o.gonggu_price,
+        fee_rate: feeDefault,
+        sort_order: order++,
+      }));
+      await supabase.from("proposal_items").insert(rows);
+    }
+    revalidatePath(`/proposals/${proposalId}`);
+    return;
+  }
+
+  // "o:<옵션id>:<제품id>" 또는 "p:<제품id>" 또는 빈값(직접입력)
   let productId: string | null = null;
   let optionId: string | null = null;
   let name = str(formData.get("name_text"));

@@ -73,14 +73,12 @@ export default async function ProposalEditor({
     proposal.recipient_name ||
     "—";
 
-  // 품목 드롭다운
-  const itemOptions: { value: string; label: string }[] = [];
-  for (const p of products) {
-    itemOptions.push({ value: `p:${p.id}`, label: p.name });
-    for (const o of options.filter((x) => x.product_id === p.id)) {
-      itemOptions.push({ value: `o:${o.id}:${p.id}`, label: `${p.name} · ${o.name}` });
-    }
-  }
+  // 품목 드롭다운: 제품별 그룹 — 맨 위 '전체 옵션 담기' + 개별 옵션
+  const itemGroups = products.map((p) => ({
+    productId: p.id,
+    productName: p.name,
+    options: options.filter((x) => x.product_id === p.id),
+  }));
 
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host") ?? "localhost:3000"}`;
@@ -147,10 +145,22 @@ export default async function ProposalEditor({
             등록된 제품에서 선택
             <select name="item" defaultValue="" className={inputCls}>
               <option value="">— 아래에 직접 입력</option>
-              {itemOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+              {itemGroups.map((g) => (
+                <optgroup key={g.productId} label={g.productName}>
+                  <option value={`c:${g.productId}`}>
+                    ▸ {g.productName} 전체 담기 (옵션 {g.options.length}개)
+                  </option>
+                  {g.options.map((o) => (
+                    <option key={o.id} value={`o:${o.id}:${g.productId}`}>
+                      {g.productName} · {o.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            <span className="mt-1 block text-xs text-slate-400">
+              대분류 “전체 담기”를 고르면 하위 옵션이 한 번에 들어갑니다.
+            </span>
           </label>
           <label className="text-sm font-medium text-slate-700">
             상품명 (직접 입력 시)
