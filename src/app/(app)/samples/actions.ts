@@ -54,6 +54,48 @@ export async function createSample(formData: FormData) {
   revalidatePath(back);
 }
 
+/** 샘플 발송 기록 수정 (전체 필드) */
+export async function updateSample(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const back = String(formData.get("back") ?? "/samples");
+  if (!id) redirect(back);
+
+  const contactId = str(formData.get("contact_id"));
+  const itemText = str(formData.get("item_text"));
+  const item = String(formData.get("item") ?? "");
+  let productId: string | null = null;
+  let optionId: string | null = null;
+  if (item.startsWith("p:")) {
+    productId = item.slice(2) || null;
+  } else if (item.startsWith("o:")) {
+    const [, oid, pid] = item.split(":");
+    optionId = oid || null;
+    productId = pid || null;
+  }
+
+  const qtyRaw = String(formData.get("quantity") ?? "").trim();
+  const quantity = Math.max(1, parseInt(qtyRaw.replace(/,/g, ""), 10) || 1);
+
+  const supabase = await createClient();
+  await supabase
+    .from("sample_shipments")
+    .update({
+      contact_id: contactId,
+      product_id: productId,
+      product_option_id: optionId,
+      item_text: itemText,
+      quantity,
+      sent_at: str(formData.get("sent_at")) ?? new Date().toISOString().slice(0, 10),
+      courier: str(formData.get("courier")),
+      tracking_no: str(formData.get("tracking_no")),
+      memo: str(formData.get("memo")),
+    })
+    .eq("id", id);
+
+  revalidatePath(back);
+  redirect(back);
+}
+
 /** 회수 여부 토글 (가끔 쓰는 기능) */
 export async function toggleReturned(formData: FormData) {
   const id = String(formData.get("id") ?? "");
