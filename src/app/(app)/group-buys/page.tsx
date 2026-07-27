@@ -11,14 +11,25 @@ type GroupBuyRow = {
   group_buy_items: { count: number }[];
 };
 
-const FILTERS = ["진행중", "예정", "정산대기", "종료", "전체"];
-const STATUS_OPTIONS = ["예정", "진행중", "종료", "정산대기", "완료"];
+/** 공구 진행 흐름 12단계 (기획서 6장) */
+const STATUS_OPTIONS = [
+  "①제안접수", "②제안서전달", "③조건협의", "④셀러승인", "⑤샘플발송", "⑥콘텐츠제작",
+  "⑦공구오픈", "⑧진행중", "⑨공구종료", "⑩정산대기", "⑪최종정산", "⑫완료",
+];
+/** 빠른 필터: 자주 보는 묶음 + 전체 */
+const FILTERS: { label: string; match: string[] }[] = [
+  { label: "진행중", match: ["⑦공구오픈", "⑧진행중"] },
+  { label: "준비중", match: ["①제안접수", "②제안서전달", "③조건협의", "④셀러승인", "⑤샘플발송", "⑥콘텐츠제작"] },
+  { label: "정산", match: ["⑨공구종료", "⑩정산대기", "⑪최종정산"] },
+  { label: "완료", match: ["⑫완료"] },
+  { label: "전체", match: [] },
+];
 
 function statusClass(s: string) {
-  if (s === "진행중") return "bg-indigo-50 text-indigo-700";
-  if (s === "예정") return "bg-emerald-50 text-emerald-700";
-  if (s === "정산대기") return "bg-amber-50 text-amber-700";
-  return "bg-slate-100 text-slate-600";
+  if (s.includes("진행중") || s.includes("공구오픈")) return "bg-indigo-50 text-indigo-700";
+  if (s.includes("정산") || s.includes("종료")) return "bg-amber-50 text-amber-700";
+  if (s.includes("완료")) return "bg-slate-100 text-slate-600";
+  return "bg-emerald-50 text-emerald-700";
 }
 
 export default async function GroupBuysPage({
@@ -34,7 +45,8 @@ export default async function GroupBuysPage({
     .from("group_buys")
     .select("id, title, status, start_date, end_date, group_buy_items(count)")
     .order("created_at", { ascending: false });
-  if (active !== "전체") query = query.eq("status", active);
+  const f = FILTERS.find((x) => x.label === active);
+  if (f && f.match.length) query = query.in("status", f.match);
   const { data } = await query;
   const rows = (data ?? []) as GroupBuyRow[];
 
@@ -60,7 +72,7 @@ export default async function GroupBuysPage({
           </label>
           <label className="text-sm font-medium text-slate-700">
             상태
-            <select name="status" defaultValue="예정" className={inputCls}>
+            <select name="status" defaultValue="①제안접수" className={inputCls}>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -105,16 +117,16 @@ export default async function GroupBuysPage({
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <Link
-            key={f}
-            href={`/group-buys?status=${encodeURIComponent(f)}`}
+            key={f.label}
+            href={`/group-buys?status=${encodeURIComponent(f.label)}`}
             className={
               "rounded-full px-3 py-1.5 text-sm font-medium transition " +
-              (active === f
+              (active === f.label
                 ? "bg-indigo-600 text-white"
                 : "border border-slate-300 text-slate-600 hover:bg-slate-50")
             }
           >
-            {f}
+            {f.label}
           </Link>
         ))}
       </div>

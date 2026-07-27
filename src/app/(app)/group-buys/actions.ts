@@ -36,7 +36,7 @@ export async function createGroupBuy(formData: FormData) {
     .insert({
       company_id: company.id,
       title,
-      status: str(formData.get("status")) ?? "예정",
+      status: str(formData.get("status")) ?? "①제안접수",
       start_date: str(formData.get("start_date")),
       end_date: str(formData.get("end_date")),
       settle_days: int(formData.get("settle_days")) ?? 14,
@@ -66,21 +66,49 @@ export async function addItem(formData: FormData) {
 
   const supabase = await createClient();
 
-  // 선택한 제품 이름을 가져와 보관(제품이 나중에 삭제돼도 남도록)
+  // 선택한 제품 이름·상세URL을 가져와 보관(제품이 나중에 삭제돼도 남도록)
   const { data: product } = await supabase
     .from("products")
-    .select("name")
+    .select("name, detail_url")
     .eq("id", productId)
-    .maybeSingle<{ name: string }>();
+    .maybeSingle<{ name: string; detail_url: string | null }>();
+
+  // 입력값이 비어 있으면 카탈로그 옵션에서 자동으로 채운다
+  let gonggu = num(formData.get("gonggu_price"));
+  let margin = num(formData.get("margin_unit"));
+  if (gonggu == null) {
+    const { data: opt } = await supabase
+      .from("product_options")
+      .select("gonggu_price, supply_price")
+      .eq("product_id", productId)
+      .not("gonggu_price", "is", null)
+      .order("sort_order")
+      .limit(1)
+      .maybeSingle<{ gonggu_price: number | null; supply_price: number | null }>();
+    if (opt?.gonggu_price != null) {
+      gonggu = opt.gonggu_price;
+      // 마진 = 공구가 − 공급가 (공급가가 있으면)
+      if (margin == null && opt.supply_price != null) {
+        margin = opt.gonggu_price - opt.supply_price;
+      }
+    }
+  }
+
+  // 상품번호가 비었으면 제품 상세URL에서 추출 시도 (…/products/13641036877)
+  let storeNo = str(formData.get("store_product_no"));
+  if (!storeNo && product?.detail_url) {
+    const m = product.detail_url.match(/\/products\/(\d+)/);
+    if (m) storeNo = m[1];
+  }
 
   const { error } = await supabase.from("group_buy_items").insert({
     group_buy_id: groupBuyId,
     product_id: productId,
     product_name: product?.name ?? "제품",
-    store_product_no: str(formData.get("store_product_no")),
+    store_product_no: storeNo,
     allocated_qty: int(formData.get("allocated_qty")),
-    gonggu_price: num(formData.get("gonggu_price")),
-    margin_unit: num(formData.get("margin_unit")),
+    gonggu_price: gonggu,
+    margin_unit: margin,
   });
 
   if (error) redirect(`/group-buys/${groupBuyId}?error=save`);
@@ -306,4 +334,48 @@ export async function deleteOptionPrice(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("group_buy_item_prices").delete().eq("id", id);
   revalidatePath(`/group-buys/${groupBuyId}`);
+}
+
+/** 공구에 셀러·벤더 여러 곳 연결(체크박스 전체 재설정) */
+export async function setGroupBuyContactsMulti(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!groupBuyId) redirect("/group-buys");
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+
+  const sellerIds = formData.getAll("seller_ids").map(String).filter(Boolean);
+  const vendorIds = formData.getAll("vendor_ids").map(String).filter(Boolean);
+
+  const supabase = await createClient();
+  await supabase.from("group_buy_contacts").delete().eq("group_buy_id", groupBuyId);
+
+  const rows = [
+    ...sellerIds.map((cid) => ({ company_id: company.id, group_buy_id: groupBuyId, contact_id: cid, role: "셀러" })),
+    ...vendorIds.map((cid) => ({ company_id: company.id, group_buy_id: groupBuyId, contact_id: cid, role: "벤더" })),
+  ];
+  if (rows.length) await supabase.from("group_buy_contacts").insert(rows);
+
+  // 실적 집계(셀러/벤더 상세)는 아직 단일 컬럼을 쓰므로 대표 1곳을 함께 저장
+  await supabase
+    .from("group_buys")
+    .update({
+      seller_contact_id: sellerIds[0] ?? null,
+      vendor_contact_id: vendorIds[0] ?? null,
+    })
+    .eq("id", groupBuyId);
+
+  revalidatePath(`/group-buys/${groupBuyId}`);
+}
+
+/** 공구 상태 변경 (12단계) */
+export async function setGroupBuyStatus(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (!groupBuyId || !status) redirect("/group-buys");
+
+  const supabase = await createClient();
+  await supabase.from("group_buys").update({ status }).eq("id", groupBuyId);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  revalidatePath("/group-buys");
 }

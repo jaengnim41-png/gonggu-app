@@ -13,6 +13,8 @@ import {
   createShareLink,
   toggleShareLink,
   setGroupBuyContacts,
+  setGroupBuyContactsMulti,
+  setGroupBuyStatus,
   setOptionPrice,
 } from "../actions";
 import { CopyLink } from "@/components/copy-link";
@@ -62,6 +64,12 @@ type Order = {
 };
 
 type ProductOpt = { id: string; name: string };
+
+/** 공구 진행 흐름 12단계 (기획서 6장) */
+const STATUS_12 = [
+  "①제안접수", "②제안서전달", "③조건협의", "④셀러승인", "⑤샘플발송", "⑥콘텐츠제작",
+  "⑦공구오픈", "⑧진행중", "⑨공구종료", "⑩정산대기", "⑪최종정산", "⑫완료",
+];
 
 function won(n: number | null) {
   return n == null ? "—" : "₩" + n.toLocaleString("ko-KR");
@@ -131,6 +139,15 @@ export default async function GroupBuyDetailPage({
     .select("id, name")
     .order("sort_order", { ascending: true });
   const products = (prodData ?? []) as ProductOpt[];
+
+  // 이 공구에 연결된 셀러·벤더(여러 곳)
+  const { data: gbcData } = await supabase
+    .from("group_buy_contacts")
+    .select("contact_id, role")
+    .eq("group_buy_id", id);
+  const gbContacts = (gbcData ?? []) as { contact_id: string; role: string }[];
+  const linkedSellerIds = new Set(gbContacts.filter((x) => x.role === "셀러").map((x) => x.contact_id));
+  const linkedVendorIds = new Set(gbContacts.filter((x) => x.role === "벤더").map((x) => x.contact_id));
 
   // 옵션별 가격 예외
   const itemIds = items.map((i) => i.id);
@@ -243,39 +260,55 @@ export default async function GroupBuyDetailPage({
         </div>
         {gb.memo && <p className="mt-2 text-xs text-slate-500">메모: {gb.memo}</p>}
 
-        {/* 진행 셀러/벤더 연결 */}
-        <form action={setGroupBuyContacts} className="mt-4 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-4">
+        {/* 공구 상태 (12단계) */}
+        <form action={setGroupBuyStatus} className="mt-4 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-4">
           <input type="hidden" name="group_buy_id" value={gb.id} />
           <label className="text-xs font-medium text-slate-600">
-            진행 셀러
-            <select
-              name="seller_contact_id"
-              defaultValue={gb.seller_contact_id ?? ""}
-              className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
-            >
-              <option value="">— 없음</option>
-              {sellerContacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs font-medium text-slate-600">
-            벤더
-            <select
-              name="vendor_contact_id"
-              defaultValue={gb.vendor_contact_id ?? ""}
-              className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
-            >
-              <option value="">— 없음</option>
-              {vendorContacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+            공구 상태
+            <select name="status" defaultValue={gb.status} className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm">
+              {STATUS_12.map((s) => (
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </label>
           <button type="submit" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            상태 저장
+          </button>
+        </form>
+
+        {/* 진행 셀러/벤더 연결 (여러 곳 선택 가능) */}
+        <form action={setGroupBuyContactsMulti} className="mt-4 border-t border-slate-100 pt-4">
+          <input type="hidden" name="group_buy_id" value={gb.id} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <fieldset>
+              <legend className="text-xs font-medium text-slate-600">진행 셀러 (여러 명 선택 가능)</legend>
+              <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-slate-200 p-2">
+                {sellerContacts.length === 0 && <span className="text-xs text-slate-400">등록된 셀러가 없습니다.</span>}
+                {sellerContacts.map((c) => (
+                  <label key={c.id} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700">
+                    <input type="checkbox" name="seller_ids" value={c.id} defaultChecked={linkedSellerIds.has(c.id)} />
+                    {c.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="text-xs font-medium text-slate-600">벤더 (여러 곳 선택 가능)</legend>
+              <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-slate-200 p-2">
+                {vendorContacts.length === 0 && <span className="text-xs text-slate-400">등록된 벤더가 없습니다.</span>}
+                {vendorContacts.map((c) => (
+                  <label key={c.id} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700">
+                    <input type="checkbox" name="vendor_ids" value={c.id} defaultChecked={linkedVendorIds.has(c.id)} />
+                    {c.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+          <button type="submit" className="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
             연결 저장
           </button>
-          <span className="text-[11px] text-slate-400">셀러/벤더는 왼쪽 메뉴에서 먼저 등록하세요.</span>
+          <span className="ml-2 text-[11px] text-slate-400">셀러/벤더는 왼쪽 메뉴에서 먼저 등록하세요.</span>
         </form>
         <form action={openThread} className="mt-3">
           <input type="hidden" name="kind" value="공구" />
@@ -420,7 +453,7 @@ export default async function GroupBuyDetailPage({
             </label>
             <label className="text-sm font-medium text-slate-700">
               스마트스토어 상품번호
-              <input name="store_product_no" placeholder="예: 13641036877" className={inputCls} />
+              <input name="store_product_no" placeholder="비우면 제품 URL에서 자동" className={inputCls} />
             </label>
             <label className="text-sm font-medium text-slate-700">
               배정 수량
@@ -428,11 +461,11 @@ export default async function GroupBuyDetailPage({
             </label>
             <label className="text-sm font-medium text-slate-700">
               공구가
-              <input name="gonggu_price" inputMode="numeric" placeholder="16900" className={inputCls} />
+              <input name="gonggu_price" inputMode="numeric" placeholder="비우면 카탈로그 가격" className={inputCls} />
             </label>
             <label className="text-sm font-medium text-slate-700">
               마진단가 <span className="text-slate-400">(정산용, 1개당 마진)</span>
-              <input name="margin_unit" inputMode="numeric" placeholder="4225" className={inputCls} />
+              <input name="margin_unit" inputMode="numeric" placeholder="비우면 공구가−공급가" className={inputCls} />
             </label>
             <div className="sm:col-span-2">
               <button
