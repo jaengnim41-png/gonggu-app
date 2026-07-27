@@ -264,3 +264,46 @@ export async function setSettlementStatus(formData: FormData) {
     .eq("group_buy_id", groupBuyId);
   revalidatePath(`/group-buys/${groupBuyId}`);
 }
+
+/** 옵션별 가격 예외 저장(있으면 갱신). 한 상품 안에서 옵션마다 가격이 다를 때. */
+export async function setOptionPrice(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const itemId = String(formData.get("group_buy_item_id") ?? "");
+  const optionInfo = String(formData.get("option_info") ?? "").trim();
+  if (!groupBuyId || !itemId || !optionInfo) redirect(`/group-buys/${groupBuyId}`);
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+
+  const n = (v: FormDataEntryValue | null) => {
+    const s = String(v ?? "").trim().replace(/,/g, "");
+    if (!s) return null;
+    const x = Number(s);
+    return Number.isFinite(x) ? x : null;
+  };
+
+  const supabase = await createClient();
+  await supabase.from("group_buy_item_prices").upsert(
+    {
+      company_id: company.id,
+      group_buy_item_id: itemId,
+      option_info: optionInfo,
+      gonggu_price: n(formData.get("gonggu_price")),
+      margin_unit: n(formData.get("margin_unit")),
+    },
+    { onConflict: "group_buy_item_id,option_info" }
+  );
+
+  revalidatePath(`/group-buys/${groupBuyId}`);
+}
+
+/** 옵션별 가격 예외 삭제 → 상품 기본가로 되돌림 */
+export async function deleteOptionPrice(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  const id = String(formData.get("id") ?? "");
+  if (!id) redirect(`/group-buys/${groupBuyId}`);
+
+  const supabase = await createClient();
+  await supabase.from("group_buy_item_prices").delete().eq("id", id);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+}
