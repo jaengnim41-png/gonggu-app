@@ -124,6 +124,60 @@ export async function deleteItem(formData: FormData) {
   revalidatePath(`/group-buys/${groupBuyId}`);
 }
 
+/**
+ * 공구상품의 판매 수량을 직접 입력합니다.
+ * 값을 비우면 다시 주문 업로드 기준 자동 계산으로 돌아갑니다.
+ */
+export async function saveManualSold(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!id) return;
+
+  const raw = String(formData.get("manual_sold_qty") ?? "").trim().replace(/,/g, "");
+  const manual = raw === "" ? null : Math.max(0, parseInt(raw, 10) || 0);
+
+  const supabase = await createClient();
+  await supabase.from("group_buy_items").update({ manual_sold_qty: manual }).eq("id", id);
+  revalidatePath(`/group-buys/${groupBuyId}`);
+}
+
+/**
+ * 공구상품 한 줄 수정 — 상품번호·배정·공구가·마진·판매수량.
+ * 판매수량을 비우면 다시 주문 업로드 기준 자동 계산으로 돌아갑니다.
+ */
+export async function updateItem(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!id) return;
+
+  const numOrNull = (v: FormDataEntryValue | null) => {
+    const s = String(v ?? "").trim().replace(/,/g, "");
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+  const strOrNull = (v: FormDataEntryValue | null) => {
+    const s = String(v ?? "").trim();
+    return s ? s : null;
+  };
+
+  const soldRaw = numOrNull(formData.get("manual_sold_qty"));
+
+  const supabase = await createClient();
+  await supabase
+    .from("group_buy_items")
+    .update({
+      store_product_no: strOrNull(formData.get("store_product_no")),
+      allocated_qty: numOrNull(formData.get("allocated_qty")),
+      gonggu_price: numOrNull(formData.get("gonggu_price")),
+      margin_unit: numOrNull(formData.get("margin_unit")),
+      manual_sold_qty: soldRaw == null ? null : Math.max(0, Math.round(soldRaw)),
+    })
+    .eq("id", id);
+
+  revalidatePath(`/group-buys/${groupBuyId}`);
+}
+
 export async function uploadOrders(formData: FormData) {
   const groupBuyId = String(formData.get("group_buy_id") ?? "");
   const file = formData.get("file");

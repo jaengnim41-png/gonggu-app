@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { isLive } from "@/lib/orders/parse";
+import { calcGroupBuyTotals, type TotalsItem, type TotalsOrder } from "@/lib/group-buys/totals";
 import { createContact, bulkUploadContacts } from "../contacts/actions";
 import { ContactTable, type ContactRow } from "@/components/contact-table";
 
@@ -34,8 +34,10 @@ export default async function SellersPage({
         .select("id, kind, name, instagram, followers, phone, address, contact_info, memo, sort_order")
         .order("sort_order", { ascending: true }),
       supabase.from("group_buys").select("id, status, seller_contact_id"),
-      supabase.from("group_buy_items").select("store_product_no, gonggu_price"),
-      supabase.from("orders").select("group_buy_id, store_product_no, quantity, order_status"),
+      supabase
+        .from("group_buy_items")
+        .select("id, group_buy_id, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
+      supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
       supabase.from("contact_links").select("seller_id, vendor_id"),
     ]);
 
@@ -52,17 +54,12 @@ export default async function SellersPage({
     vendorsBySeller.set(l.seller_id, arr);
   }
 
-  // 매출 집계
-  const priceByPno = new Map<string, number>();
-  for (const it of (itemData ?? []) as Item[]) {
-    if (it.store_product_no) priceByPno.set(it.store_product_no, it.gonggu_price ?? 0);
-  }
-  const revenueByGb = new Map<string, number>();
-  for (const o of (orderData ?? []) as Order[]) {
-    if (!isLive(o.order_status)) continue;
-    const amt = (o.quantity ?? 0) * (priceByPno.get(String(o.store_product_no ?? "")) ?? 0);
-    revenueByGb.set(o.group_buy_id, (revenueByGb.get(o.group_buy_id) ?? 0) + amt);
-  }
+  // 매출 집계 (판매수량 직접 입력분 포함 — 공통 규칙)
+  const totals = calcGroupBuyTotals(
+    (itemData ?? []) as TotalsItem[],
+    (orderData ?? []) as TotalsOrder[]
+  );
+  const revenueByGb = new Map([...totals].map(([k, v]) => [k, v.revenue]));
   const gbCount = new Map<string, number>();
   const liveCount = new Map<string, number>();
   const revenue = new Map<string, number>();

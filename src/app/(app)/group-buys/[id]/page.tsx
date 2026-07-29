@@ -16,6 +16,7 @@ import {
   setGroupBuyContactsMulti,
   setGroupBuyStatus,
   setOptionPrice,
+  updateItem,
 } from "../actions";
 import { CopyLink } from "@/components/copy-link";
 import { openThread } from "../../messages/actions";
@@ -41,6 +42,7 @@ type Item = {
   allocated_qty: number | null;
   gonggu_price: number | null;
   margin_unit: number | null;
+  manual_sold_qty: number | null;
 };
 
 type Settlement = {
@@ -98,7 +100,7 @@ export default async function GroupBuyDetailPage({
 
   const { data: itemData } = await supabase
     .from("group_buy_items")
-    .select("id, product_name, store_product_no, allocated_qty, gonggu_price, margin_unit")
+    .select("id, product_name, store_product_no, allocated_qty, gonggu_price, margin_unit, manual_sold_qty")
     .eq("group_buy_id", id)
     .order("created_at", { ascending: true });
   const items = (itemData ?? []) as Item[];
@@ -186,13 +188,17 @@ export default async function GroupBuyDetailPage({
     };
   }
 
-  // 상품번호 → 판매수량(살아있는 주문만)
-  const soldByPno = new Map<string, number>();
+  // 공구상품별 주문 집계 수량(수동 입력과 비교용)
+  const autoSoldByItem = new Map<string, number>();
   for (const o of orders) {
     if (!isLive(o.order_status)) continue;
-    const key = String(o.store_product_no ?? "");
-    soldByPno.set(key, (soldByPno.get(key) ?? 0) + (o.quantity ?? 0));
+    const it = itemByPno.get(String(o.store_product_no ?? ""));
+    if (!it) continue;
+    autoSoldByItem.set(it.id, (autoSoldByItem.get(it.id) ?? 0) + (o.quantity ?? 0));
   }
+
+  // 판매수량을 직접 입력한 상품은 주문 집계 대신 그 값을 씁니다.
+  const manualItemIds = new Set(items.filter((i) => i.manual_sold_qty != null).map((i) => i.id));
 
   // 판매현황: 옵션정보별 수량·금액 (옵션별 단가 반영)
   const salesByOption = new Map<string, { qty: number; amount: number; unit: number }>();
@@ -201,8 +207,10 @@ export default async function GroupBuyDetailPage({
   let marginTotal = 0;
   for (const o of orders) {
     if (!isLive(o.order_status)) continue;
-    const key = o.option_info || "(옵션 없음)";
     const pno = String(o.store_product_no ?? "");
+    const it = itemByPno.get(pno);
+    if (it && manualItemIds.has(it.id)) continue; // 직접 입력한 상품은 주문 무시
+    const key = o.option_info || "(옵션 없음)";
     const { price, margin } = unitOf(pno, o.option_info);
     const q = o.quantity ?? 0;
     const amount = q * price;
@@ -214,6 +222,16 @@ export default async function GroupBuyDetailPage({
     totalQty += q;
     totalAmount += amount;
     marginTotal += q * margin;
+  }
+  // 직접 입력한 상품은 상품 단위로 한 줄
+  for (const it of items) {
+    if (it.manual_sold_qty == null) continue;
+    const q = it.manual_sold_qty;
+    const price = it.gonggu_price ?? 0;
+    salesByOption.set(`${it.product_name} (직접 입력)`, { qty: q, amount: q * price, unit: price });
+    totalQty += q;
+    totalAmount += q * price;
+    marginTotal += q * (it.margin_unit ?? 0);
   }
   const salesRows = [...salesByOption.entries()].sort((a, b) => b[1].amount - a[1].amount);
 
@@ -505,19 +523,54 @@ export default async function GroupBuyDetailPage({
             </thead>
             <tbody>
               {items.map((it) => {
-                const sold = soldByPno.get(String(it.store_product_no ?? "")) ?? 0;
+                const autoSold = autoSoldByItem.get(it.id) ?? 0;
+                const sold = it.manual_sold_qty ?? autoSold;
                 const remain =
                   it.allocated_qty == null ? null : it.allocated_qty - sold;
                 const low = remain != null && remain <= 10;
+                const fid = `item-${it.id}`;
+                const cell =
+                  "w-full rounded-md border border-transparent bg-slate-50 px-2 py-1 text-right text-sm tabular-nums text-slate-800 outline-none hover:border-slate-300 focus:border-indigo-500 focus:bg-white";
                 return (
                   <tr key={it.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-3 text-slate-900">{it.product_name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                      {it.store_product_no ?? "—"}
+                    <td className="px-4 py-3 text-slate-900">
+                      {it.product_name}
+                      {/* 이 행의 수정 폼(각 칸은 form 속성으로 연결) */}
+                      <form id={fid} action={updateItem}>
+                        <input type="hidden" name="id" value={it.id} />
+                        <input type="hidden" name="group_buy_id" value={gb.id} />
+                      </form>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{won(it.gonggu_price)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{qty(it.allocated_qty)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{sold.toLocaleString("ko-KR")}</td>
+                    <td className="px-4 py-3">
+                      <input
+                        form={fid}
+                        name="store_product_no"
+                        defaultValue={it.store_product_no ?? ""}
+                        placeholder="상품번호"
+                        className={cell + " text-left font-mono text-xs"}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input form={fid} name="gonggu_price" inputMode="numeric" defaultValue={it.gonggu_price ?? ""} placeholder="공구가" className={cell} />
+                      <input form={fid} name="margin_unit" inputMode="numeric" defaultValue={it.margin_unit ?? ""} placeholder="마진단가" className={cell + " mt-1 text-[11px] text-slate-500"} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input form={fid} name="allocated_qty" inputMode="numeric" defaultValue={it.allocated_qty ?? ""} placeholder="배정" className={cell} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        form={fid}
+                        name="manual_sold_qty"
+                        inputMode="numeric"
+                        defaultValue={it.manual_sold_qty ?? ""}
+                        placeholder={autoSold.toLocaleString("ko-KR")}
+                        title="비우면 주문 업로드 기준으로 자동 계산됩니다"
+                        className={cell}
+                      />
+                      {it.manual_sold_qty != null && (
+                        <span className="mt-0.5 block text-right text-[10px] font-semibold text-amber-600">직접 입력</span>
+                      )}
+                    </td>
                     <td
                       className={
                         "px-4 py-3 text-right font-semibold tabular-nums " +
@@ -531,17 +584,26 @@ export default async function GroupBuyDetailPage({
                       {remain == null ? "—" : remain.toLocaleString("ko-KR")}
                       {low && <span className="ml-1 text-[10px] font-bold">매진임박</span>}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <form action={deleteItem}>
-                        <input type="hidden" name="id" value={it.id} />
-                        <input type="hidden" name="group_buy_id" value={gb.id} />
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1.5">
                         <button
                           type="submit"
-                          className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:border-rose-300 hover:text-rose-600"
+                          form={fid}
+                          className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
                         >
-                          삭제
+                          저장
                         </button>
-                      </form>
+                        <form action={deleteItem}>
+                          <input type="hidden" name="id" value={it.id} />
+                          <input type="hidden" name="group_buy_id" value={gb.id} />
+                          <button
+                            type="submit"
+                            className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:border-rose-300 hover:text-rose-600"
+                          >
+                            삭제
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 );

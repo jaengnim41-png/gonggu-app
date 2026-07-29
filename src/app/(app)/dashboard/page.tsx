@@ -1,11 +1,30 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionProfile } from "@/lib/data/profile";
-import { isLive } from "@/lib/orders/parse";
+import {
+  calcGroupBuyTotals,
+  calcSoldByItem,
+  type TotalsItem,
+  type TotalsOrder,
+} from "@/lib/group-buys/totals";
 
 type GB = { id: string; title: string; status: string; end_date: string | null };
-type Item = { group_buy_id: string; product_name: string; store_product_no: string | null; gonggu_price: number | null };
-type Order = { group_buy_id: string; store_product_no: string | null; quantity: number; order_status: string | null };
+type Item = {
+  id: string;
+  group_buy_id: string;
+  product_name: string;
+  store_product_no: string | null;
+  gonggu_price: number | null;
+  margin_unit: number | null;
+  manual_sold_qty: number | null;
+};
+type Order = {
+  group_buy_id: string;
+  store_product_no: string | null;
+  option_info: string | null;
+  quantity: number;
+  order_status: string | null;
+};
 
 function won(n: number) {
   return "₩" + Math.round(n).toLocaleString("ko-KR");
@@ -18,32 +37,29 @@ export default async function DashboardPage() {
   const [{ data: gbData }, { data: itemData }, { data: orderData }] =
     await Promise.all([
       supabase.from("group_buys").select("id, title, status, end_date").order("created_at", { ascending: false }),
-      supabase.from("group_buy_items").select("group_buy_id, product_name, store_product_no, gonggu_price"),
-      supabase.from("orders").select("group_buy_id, store_product_no, quantity, order_status"),
+      supabase
+        .from("group_buy_items")
+        .select("id, group_buy_id, product_name, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
+      supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
     ]);
 
   const groupBuys = (gbData ?? []) as GB[];
   const items = (itemData ?? []) as Item[];
   const orders = (orderData ?? []) as Order[];
 
-  // 상품번호 → { 가격, 제품명 }
-  const pmap = new Map<string, { price: number; name: string }>();
-  for (const it of items) {
-    if (it.store_product_no)
-      pmap.set(it.store_product_no, { price: it.gonggu_price ?? 0, name: it.product_name });
-  }
+  // 공구별 매출 (판매수량 직접 입력분 포함 — 공통 규칙)
+  const totals = calcGroupBuyTotals(items as TotalsItem[], orders as TotalsOrder[]);
+  const revenueByGb = new Map([...totals].map(([k, v]) => [k, v.revenue]));
+  const totalRevenue = [...totals.values()].reduce((s, v) => s + v.revenue, 0);
 
-  // 집계
-  let totalRevenue = 0;
-  const revenueByGb = new Map<string, number>();
+  // 제품별 매출: 상품 단위로 (직접 입력분은 그 상품에 그대로)
+  const soldByItem = calcSoldByItem(items as TotalsItem[], orders as TotalsOrder[]);
   const revenueByProduct = new Map<string, number>();
-  for (const o of orders) {
-    if (!isLive(o.order_status)) continue;
-    const info = pmap.get(String(o.store_product_no ?? ""));
-    const amount = (o.quantity ?? 0) * (info?.price ?? 0);
-    totalRevenue += amount;
-    revenueByGb.set(o.group_buy_id, (revenueByGb.get(o.group_buy_id) ?? 0) + amount);
-    if (info) revenueByProduct.set(info.name, (revenueByProduct.get(info.name) ?? 0) + amount);
+  for (const it of items) {
+    const q = soldByItem.get(it.id) ?? 0;
+    if (!q) continue;
+    const amount = q * (it.gonggu_price ?? 0);
+    revenueByProduct.set(it.product_name, (revenueByProduct.get(it.product_name) ?? 0) + amount);
   }
 
   const statusCount = (s: string) => groupBuys.filter((g) => g.status === s).length;
