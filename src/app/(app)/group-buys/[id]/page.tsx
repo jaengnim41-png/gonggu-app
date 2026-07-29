@@ -235,6 +235,16 @@ export default async function GroupBuyDetailPage({
   }
   const salesRows = [...salesByOption.entries()].sort((a, b) => b[1].amount - a[1].amount);
 
+  // 옵션글자 → 그 옵션이 속한 공구상품 id (단가 조정 폼에서 사용)
+  const itemIdByOption = new Map<string, string>();
+  for (const o of orders) {
+    if (!isLive(o.order_status)) continue;
+    const key = o.option_info || "(옵션 없음)";
+    if (itemIdByOption.has(key)) continue;
+    const it = itemByPno.get(String(o.store_product_no ?? ""));
+    if (it) itemIdByOption.set(key, it.id);
+  }
+
   // 판매현황 표에 넘길 행 (체크박스 일괄 적용용 정보 포함)
   const salesTableRows: SalesRow[] = salesRows.map(([opt, v]) => {
     const oItemId = itemIdByOption.get(opt) ?? "";
@@ -251,15 +261,6 @@ export default async function GroupBuyDetailPage({
     };
   });
 
-  // 옵션글자 → 그 옵션이 속한 공구상품 id (단가 조정 폼에서 사용)
-  const itemIdByOption = new Map<string, string>();
-  for (const o of orders) {
-    if (!isLive(o.order_status)) continue;
-    const key = o.option_info || "(옵션 없음)";
-    if (itemIdByOption.has(key)) continue;
-    const it = itemByPno.get(String(o.store_product_no ?? ""));
-    if (it) itemIdByOption.set(key, it.id);
-  }
   const feeRate = settlement?.fee_rate ?? 3.495;
   const feeAmount = Math.round((totalAmount * feeRate) / 100);
   const finalAmount = marginTotal - feeAmount;
