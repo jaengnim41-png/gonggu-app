@@ -379,6 +379,69 @@ export async function setOptionPrice(formData: FormData) {
   revalidatePath(`/group-buys/${groupBuyId}`);
 }
 
+/**
+ * 여러 옵션의 단가를 한 번에 지정합니다.
+ * targets 각 값은 JSON `[공구상품id, 옵션글자]` 형식.
+ * 공구가·마진을 모두 비우면 선택한 옵션들의 개별단가를 해제합니다.
+ */
+export async function setOptionPricesBulk(formData: FormData) {
+  const groupBuyId = String(formData.get("group_buy_id") ?? "");
+  if (!groupBuyId) redirect("/group-buys");
+
+  const targets = formData.getAll("target").map(String).filter(Boolean);
+  if (targets.length === 0) redirect(`/group-buys/${groupBuyId}?bulk=none`);
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+
+  const n = (v: FormDataEntryValue | null) => {
+    const s = String(v ?? "").trim().replace(/,/g, "");
+    if (!s) return null;
+    const x = Number(s);
+    return Number.isFinite(x) ? x : null;
+  };
+  const gonggu = n(formData.get("gonggu_price"));
+  const margin = n(formData.get("margin_unit"));
+
+  const parsed: { itemId: string; optionInfo: string }[] = [];
+  for (const t of targets) {
+    try {
+      const [itemId, optionInfo] = JSON.parse(t) as [string, string];
+      if (itemId && optionInfo) parsed.push({ itemId, optionInfo });
+    } catch {
+      // 형식이 깨진 값은 건너뜁니다
+    }
+  }
+  if (parsed.length === 0) redirect(`/group-buys/${groupBuyId}?bulk=none`);
+
+  const supabase = await createClient();
+
+  // 둘 다 비우면 개별단가 해제
+  if (gonggu == null && margin == null) {
+    for (const p of parsed) {
+      await supabase
+        .from("group_buy_item_prices")
+        .delete()
+        .eq("group_buy_item_id", p.itemId)
+        .eq("option_info", p.optionInfo);
+    }
+  } else {
+    await supabase.from("group_buy_item_prices").upsert(
+      parsed.map((p) => ({
+        company_id: company.id,
+        group_buy_item_id: p.itemId,
+        option_info: p.optionInfo,
+        gonggu_price: gonggu,
+        margin_unit: margin,
+      })),
+      { onConflict: "group_buy_item_id,option_info" }
+    );
+  }
+
+  revalidatePath(`/group-buys/${groupBuyId}`);
+  redirect(`/group-buys/${groupBuyId}?bulk=${parsed.length}`);
+}
+
 /** 옵션별 가격 예외 삭제 → 상품 기본가로 되돌림 */
 export async function deleteOptionPrice(formData: FormData) {
   const groupBuyId = String(formData.get("group_buy_id") ?? "");

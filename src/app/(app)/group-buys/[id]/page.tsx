@@ -15,10 +15,10 @@ import {
   setGroupBuyContacts,
   setGroupBuyContactsMulti,
   setGroupBuyStatus,
-  setOptionPrice,
   updateItem,
 } from "../actions";
 import { CopyLink } from "@/components/copy-link";
+import { SalesTable, type SalesRow } from "./sales-table";
 import { openThread } from "../../messages/actions";
 
 type GroupBuy = {
@@ -85,10 +85,10 @@ export default async function GroupBuyDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; uok?: string; uerror?: string }>;
+  searchParams: Promise<{ error?: string; uok?: string; uerror?: string; bulk?: string }>;
 }) {
   const { id } = await params;
-  const { error, uok, uerror } = await searchParams;
+  const { error, uok, uerror, bulk } = await searchParams;
   const supabase = await createClient();
 
   const { data: gb } = await supabase
@@ -234,6 +234,22 @@ export default async function GroupBuyDetailPage({
     marginTotal += q * (it.margin_unit ?? 0);
   }
   const salesRows = [...salesByOption.entries()].sort((a, b) => b[1].amount - a[1].amount);
+
+  // 판매현황 표에 넘길 행 (체크박스 일괄 적용용 정보 포함)
+  const salesTableRows: SalesRow[] = salesRows.map(([opt, v]) => {
+    const oItemId = itemIdByOption.get(opt) ?? "";
+    const ov = optionPrices.find((p) => p.option_info === opt && p.group_buy_item_id === oItemId);
+    return {
+      optionInfo: opt,
+      itemId: oItemId,
+      qty: v.qty,
+      amount: v.amount,
+      unit: v.unit,
+      overrideGonggu: ov?.gonggu_price ?? null,
+      overrideMargin: ov?.margin_unit ?? null,
+      hasOverride: !!ov,
+    };
+  });
 
   // 옵션글자 → 그 옵션이 속한 공구상품 id (단가 조정 폼에서 사용)
   const itemIdByOption = new Map<string, string>();
@@ -617,78 +633,20 @@ export default async function GroupBuyDetailPage({
       {salesRows.length > 0 && (
         <>
           <h2 className="mt-8 text-sm font-bold text-slate-900">판매현황</h2>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">옵션</th>
-                  <th className="px-4 py-3 text-right">단가</th>
-                  <th className="px-4 py-3 text-right">수량</th>
-                  <th className="px-4 py-3 text-right">판매금액</th>
-                  <th className="px-4 py-3 text-right">단가 조정</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salesRows.map(([opt, v]) => {
-                  const oItemId = itemIdByOption.get(opt) ?? "";
-                  const ov = optionPrices.find(
-                    (p) => p.option_info === opt && p.group_buy_item_id === oItemId
-                  );
-                  return (
-                    <tr key={opt} className="border-b border-slate-100">
-                      <td className="px-4 py-3 text-slate-900">
-                        {opt}
-                        {ov && (
-                          <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                            개별단가
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-500">{won(v.unit)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{v.qty.toLocaleString("ko-KR")}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{won(v.amount)}</td>
-                      <td className="px-4 py-3">
-                        <form action={setOptionPrice} className="flex items-center justify-end gap-1">
-                          <input type="hidden" name="group_buy_id" value={gb.id} />
-                          <input type="hidden" name="group_buy_item_id" value={itemIdByOption.get(opt) ?? ""} />
-                          <input type="hidden" name="option_info" value={opt} />
-                          <input
-                            name="gonggu_price"
-                            inputMode="numeric"
-                            defaultValue={ov?.gonggu_price ?? ""}
-                            placeholder="공구가"
-                            className="w-20 rounded-md border border-slate-200 px-1.5 py-1 text-right text-xs"
-                          />
-                          <input
-                            name="margin_unit"
-                            inputMode="numeric"
-                            defaultValue={ov?.margin_unit ?? ""}
-                            placeholder="마진"
-                            className="w-16 rounded-md border border-slate-200 px-1.5 py-1 text-right text-xs"
-                          />
-                          <button className="rounded-md border border-slate-300 px-1.5 py-1 text-[10px] text-slate-600 hover:border-indigo-300 hover:text-indigo-600">
-                            저장
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-indigo-50 font-bold text-indigo-900">
-                  <td className="px-4 py-3">전체 수량 및 매출</td>
-                  <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 text-right tabular-nums">{totalQty.toLocaleString("ko-KR")}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{won(totalAmount)}</td>
-                  <td className="px-4 py-3"></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          {bulk && (
+            <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+              {bulk === "none" ? "먼저 적용할 옵션을 체크해 주세요." : `${bulk}개 옵션에 단가를 적용했습니다.`}
+            </p>
+          )}
+          <SalesTable
+            groupBuyId={gb.id}
+            rows={salesTableRows}
+            totalQty={totalQty}
+            totalAmount={totalAmount}
+          />
           <p className="mt-2 text-xs text-slate-400">
-            판매금액 = 수량 × 단가. 한 상품 안에서 옵션마다 가격이 다르면 오른쪽 “단가 조정”에 그 옵션의 공구가·마진을 넣으세요.
-            비워두면 공구 상품의 기본 공구가를 씁니다.
+            판매금액 = 수량 × 단가. 옵션마다 가격이 다르면 체크박스로 여러 개를 골라 위에서 한 번에 적용하거나,
+            오른쪽 “단가 조정”에서 하나씩 넣으세요. 비워두면 공구 상품의 기본 공구가를 씁니다.
           </p>
         </>
       )}
