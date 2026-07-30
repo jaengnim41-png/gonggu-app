@@ -311,39 +311,39 @@ export default async function GroupBuyDetailPage({
           </button>
         </form>
 
-        {/* 진행 셀러/벤더 연결 (여러 곳 선택 가능) */}
-        <form action={setGroupBuyContactsMulti} className="mt-4 border-t border-slate-100 pt-4">
+        {/* 진행 셀러/벤더 연결 (공구당 각 1곳) */}
+        <form action={setGroupBuyContactsMulti} className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
           <input type="hidden" name="group_buy_id" value={gb.id} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <fieldset>
-              <legend className="text-xs font-medium text-slate-600">진행 셀러 (여러 명 선택 가능)</legend>
-              <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-slate-200 p-2">
-                {sellerContacts.length === 0 && <span className="text-xs text-slate-400">등록된 셀러가 없습니다.</span>}
-                {sellerContacts.map((c) => (
-                  <label key={c.id} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700">
-                    <input type="checkbox" name="seller_ids" value={c.id} defaultChecked={linkedSellerIds.has(c.id)} />
-                    {c.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend className="text-xs font-medium text-slate-600">벤더 (여러 곳 선택 가능)</legend>
-              <div className="mt-1 flex flex-wrap gap-2 rounded-lg border border-slate-200 p-2">
-                {vendorContacts.length === 0 && <span className="text-xs text-slate-400">등록된 벤더가 없습니다.</span>}
-                {vendorContacts.map((c) => (
-                  <label key={c.id} className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700">
-                    <input type="checkbox" name="vendor_ids" value={c.id} defaultChecked={linkedVendorIds.has(c.id)} />
-                    {c.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </div>
-          <button type="submit" className="mt-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <label className="text-xs font-medium text-slate-600">
+            진행 셀러
+            <select
+              name="seller_ids"
+              defaultValue={[...linkedSellerIds][0] ?? ""}
+              className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            >
+              <option value="">— 없음</option>
+              {sellerContacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-slate-600">
+            벤더
+            <select
+              name="vendor_ids"
+              defaultValue={[...linkedVendorIds][0] ?? ""}
+              className="mt-1 block rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+            >
+              <option value="">— 없음</option>
+              {vendorContacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
             연결 저장
           </button>
-          <span className="ml-2 text-[11px] text-slate-400">셀러/벤더는 왼쪽 메뉴에서 먼저 등록하세요.</span>
+          <span className="text-[11px] text-slate-400">공구당 셀러·벤더 각 1곳. 왼쪽 메뉴에서 먼저 등록하세요.</span>
         </form>
         <form action={openThread} className="mt-3">
           <input type="hidden" name="kind" value="공구" />
