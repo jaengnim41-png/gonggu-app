@@ -53,6 +53,37 @@ export async function openThread(formData: FormData) {
   redirect(`/messages?t=${data}`);
 }
 
+/** 거래처를 골라 새 대화 시작(있으면 기존 방으로) */
+export async function startThread(formData: FormData) {
+  const contactId = String(formData.get("contact_id") ?? "");
+  if (!contactId) redirect("/messages");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_or_create_thread", {
+    p_kind: "거래처",
+    p_group_buy_id: null,
+    p_contact_id: contactId,
+  });
+  if (error || !data) redirect("/messages?error=open");
+  redirect(`/messages?t=${data}`);
+}
+
+/** 대화방 삭제 (방 + 메시지 함께) */
+export async function deleteThread(formData: FormData) {
+  const threadId = String(formData.get("thread_id") ?? "");
+  if (!threadId) redirect("/messages");
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/");
+
+  const supabase = await createClient();
+  // 내 회사 방인지 확인 후 삭제 (메시지는 on delete cascade)
+  await supabase.from("message_threads").delete().eq("id", threadId).eq("company_id", company.id);
+
+  revalidatePath("/messages");
+  redirect("/messages");
+}
+
 /** 방을 읽음 처리 */
 export async function markThreadRead(threadId: string) {
   const { user } = await getSessionProfile();
