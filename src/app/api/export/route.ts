@@ -15,15 +15,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  const [products, options, groupBuys, items, orders, settlements] =
-    await Promise.all([
-      supabase.from("products").select("*"),
-      supabase.from("product_options").select("*"),
-      supabase.from("group_buys").select("*"),
-      supabase.from("group_buy_items").select("*"),
-      supabase.from("orders").select("*"),
-      supabase.from("settlements").select("*"),
-    ]);
+  const [
+    products, options, groupBuys, items, orders, settlements,
+    contacts, contactLinks, vendorManagers, samples, proposals, proposalItems,
+    stockIns, inventoryOrders,
+  ] = await Promise.all([
+    supabase.from("products").select("*"),
+    supabase.from("product_options").select("*"),
+    supabase.from("group_buys").select("*"),
+    supabase.from("group_buy_items").select("*"),
+    supabase.from("orders").select("*"),
+    supabase.from("settlements").select("*"),
+    supabase.from("contacts").select("*"),
+    supabase.from("contact_links").select("*"),
+    supabase.from("vendor_managers").select("*"),
+    supabase.from("sample_shipments").select("*"),
+    supabase.from("proposals").select("*"),
+    supabase.from("proposal_items").select("*"),
+    supabase.from("stock_ins").select("*"),
+    supabase.from("inventory_orders").select("*"),
+  ]);
 
   const wb = XLSX.utils.book_new();
   const add = (name: string, rows: unknown[] | null) => {
@@ -36,6 +47,14 @@ export async function GET(request: NextRequest) {
   add("공구상품", items.data);
   add("주문", orders.data);
   add("정산", settlements.data);
+  add("거래처", contacts.data);
+  add("거래처연결", contactLinks.data);
+  add("벤더담당자", vendorManagers.data);
+  add("샘플", samples.data);
+  add("제안서", proposals.data);
+  add("제안서품목", proposalItems.data);
+  add("입고", stockIns.data);
+  add("전체주문(재고)", inventoryOrders.data);
 
   const buf: Buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
   const today = new Date().toISOString().slice(0, 10);
