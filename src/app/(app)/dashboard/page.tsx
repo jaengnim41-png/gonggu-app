@@ -7,8 +7,9 @@ import {
   type TotalsItem,
   type TotalsOrder,
 } from "@/lib/group-buys/totals";
+import { ScheduleSummary, type ScheduleEntry } from "@/components/schedule-summary";
 
-type GB = { id: string; title: string; status: string; end_date: string | null };
+type GB = { id: string; title: string; status: string; start_date: string | null; end_date: string | null };
 type Item = {
   id: string;
   group_buy_id: string;
@@ -34,18 +35,48 @@ export default async function DashboardPage() {
   const { company } = await getSessionProfile();
   const supabase = await createClient();
 
-  const [{ data: gbData }, { data: itemData }, { data: orderData }] =
+  const [{ data: gbData }, { data: itemData }, { data: orderData }, { data: gbcData }, { data: contactData }] =
     await Promise.all([
-      supabase.from("group_buys").select("id, title, status, end_date").order("created_at", { ascending: false }),
+      supabase.from("group_buys").select("id, title, status, start_date, end_date").order("created_at", { ascending: false }),
       supabase
         .from("group_buy_items")
         .select("id, group_buy_id, product_name, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
       supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
+      supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
+      supabase.from("contacts").select("id, name"),
     ]);
 
   const groupBuys = (gbData ?? []) as GB[];
   const items = (itemData ?? []) as Item[];
   const orders = (orderData ?? []) as Order[];
+  const gbContacts = (gbcData ?? []) as { group_buy_id: string; role: string; contact_id: string }[];
+  const contactName = new Map(((contactData ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+
+  // 공구 일정 집계용 엔트리
+  const productsByGb = new Map<string, Set<string>>();
+  for (const it of items) {
+    if (!productsByGb.has(it.group_buy_id)) productsByGb.set(it.group_buy_id, new Set());
+    productsByGb.get(it.group_buy_id)!.add(it.product_name);
+  }
+  const sellersByGb = new Map<string, string[]>();
+  const vendorsByGb = new Map<string, string[]>();
+  for (const gc of gbContacts) {
+    const name = contactName.get(gc.contact_id);
+    if (!name) continue;
+    const map = gc.role === "셀러" ? sellersByGb : vendorsByGb;
+    const arr = map.get(gc.group_buy_id) ?? [];
+    arr.push(name);
+    map.set(gc.group_buy_id, arr);
+  }
+  const scheduleEntries: ScheduleEntry[] = groupBuys.map((g) => ({
+    id: g.id,
+    title: g.title,
+    date: g.start_date,
+    status: g.status,
+    products: [...(productsByGb.get(g.id) ?? [])],
+    sellers: sellersByGb.get(g.id) ?? [],
+    vendors: vendorsByGb.get(g.id) ?? [],
+  }));
 
   // 공구별 매출 (판매수량 직접 입력분 포함 — 공통 규칙)
   const totals = calcGroupBuyTotals(items as TotalsItem[], orders as TotalsOrder[]);
@@ -62,7 +93,8 @@ export default async function DashboardPage() {
     revenueByProduct.set(it.product_name, (revenueByProduct.get(it.product_name) ?? 0) + amount);
   }
 
-  const statusCount = (s: string) => groupBuys.filter((g) => g.status === s).length;
+  // 상태값에 ⑧ 같은 원문자 접두사가 있어도 매칭되도록 포함 비교
+  const statusCount = (s: string) => groupBuys.filter((g) => (g.status ?? "").includes(s)).length;
   const productRank = [...revenueByProduct.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const recentGbs = groupBuys.slice(0, 6);
 
@@ -96,7 +128,12 @@ export default async function DashboardPage() {
         {stat("전체 공구", groupBuys.length + "건")}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      {/* 공구 일정 집계 (제품·셀러·벤더별 · 주/월/연) */}
+      <div className="mt-8">
+        <ScheduleSummary entries={scheduleEntries} />
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
         {/* 제품별 매출 랭킹 */}
         <div>
           <h2 className="text-sm font-bold text-slate-900">제품별 매출 🏆</h2>

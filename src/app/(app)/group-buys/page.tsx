@@ -1,63 +1,75 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createGroupBuy } from "./actions";
-
-type GroupBuyRow = {
-  id: string;
-  title: string;
-  status: string;
-  start_date: string | null;
-  end_date: string | null;
-  group_buy_items: { count: number }[];
-};
+import { GroupBuyFilter, type GBRow } from "./group-buy-filter";
 
 /** 공구 진행 흐름 12단계 (기획서 6장) */
 const STATUS_OPTIONS = [
   "①제안접수", "②제안서전달", "③조건협의", "④셀러승인", "⑤샘플발송", "⑥콘텐츠제작",
   "⑦공구오픈", "⑧진행중", "⑨공구종료", "⑩정산대기", "⑪최종정산", "⑫완료",
 ];
-/** 빠른 필터: 자주 보는 묶음 + 전체 */
-const FILTERS: { label: string; match: string[] }[] = [
-  { label: "진행중", match: ["⑦공구오픈", "⑧진행중"] },
-  { label: "준비중", match: ["①제안접수", "②제안서전달", "③조건협의", "④셀러승인", "⑤샘플발송", "⑥콘텐츠제작"] },
-  { label: "정산", match: ["⑨공구종료", "⑩정산대기", "⑪최종정산"] },
-  { label: "완료", match: ["⑫완료"] },
-  { label: "전체", match: [] },
-];
-
-function statusClass(s: string) {
-  if (s.includes("진행중") || s.includes("공구오픈")) return "bg-indigo-50 text-indigo-700";
-  if (s.includes("정산") || s.includes("종료")) return "bg-amber-50 text-amber-700";
-  if (s.includes("완료")) return "bg-slate-100 text-slate-600";
-  return "bg-emerald-50 text-emerald-700";
-}
 
 export default async function GroupBuysPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; error?: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const sp = await searchParams;
-  const active = sp.status ?? "진행중";
 
   const supabase = await createClient();
-  let query = supabase
-    .from("group_buys")
-    .select("id, title, status, start_date, end_date, group_buy_items(count)")
-    .order("created_at", { ascending: false });
-  const f = FILTERS.find((x) => x.label === active);
-  if (f && f.match.length) query = query.in("status", f.match);
-  const { data } = await query;
-  const rows = (data ?? []) as GroupBuyRow[];
+  const [{ data: gbData }, { data: itemData }, { data: gbcData }, { data: contactData }] =
+    await Promise.all([
+      supabase
+        .from("group_buys")
+        .select("id, title, status, start_date, end_date")
+        .order("start_date", { ascending: false, nullsFirst: false }),
+      supabase.from("group_buy_items").select("group_buy_id, product_name"),
+      supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
+      supabase.from("contacts").select("id, name"),
+    ]);
+
+  const contactName = new Map(((contactData ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+  const productsByGb = new Map<string, Set<string>>();
+  const itemCountByGb = new Map<string, number>();
+  for (const it of (itemData ?? []) as { group_buy_id: string; product_name: string }[]) {
+    if (!productsByGb.has(it.group_buy_id)) productsByGb.set(it.group_buy_id, new Set());
+    productsByGb.get(it.group_buy_id)!.add(it.product_name);
+    itemCountByGb.set(it.group_buy_id, (itemCountByGb.get(it.group_buy_id) ?? 0) + 1);
+  }
+  const sellersByGb = new Map<string, string[]>();
+  const vendorsByGb = new Map<string, string[]>();
+  for (const gc of (gbcData ?? []) as { group_buy_id: string; role: string; contact_id: string }[]) {
+    const name = contactName.get(gc.contact_id);
+    if (!name) continue;
+    const map = gc.role === "셀러" ? sellersByGb : vendorsByGb;
+    const arr = map.get(gc.group_buy_id) ?? [];
+    arr.push(name);
+    map.set(gc.group_buy_id, arr);
+  }
+
+  const rows: GBRow[] = ((gbData ?? []) as { id: string; title: string; status: string; start_date: string | null; end_date: string | null }[]).map((g) => ({
+    id: g.id,
+    title: g.title,
+    status: g.status,
+    start_date: g.start_date,
+    end_date: g.end_date,
+    itemCount: itemCountByGb.get(g.id) ?? 0,
+    products: [...(productsByGb.get(g.id) ?? [])],
+    sellers: sellersByGb.get(g.id) ?? [],
+    vendors: vendorsByGb.get(g.id) ?? [],
+  }));
+
+  const allProducts = [...new Set(rows.flatMap((r) => r.products))].sort();
+  const allSellers = [...new Set(rows.flatMap((r) => r.sellers))].sort();
+  const allVendors = [...new Set(rows.flatMap((r) => r.vendors))].sort();
 
   const inputCls =
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
+    <div className="mx-auto w-full max-w-5xl px-6 py-10">
       <h1 className="text-lg font-bold text-slate-900">공구</h1>
       <p className="mt-1 text-sm text-slate-500">
-        공구를 등록하고, 제품별 배정 수량을 정합니다.
+        공구를 등록하고, 제품·셀러·벤더별로 기간을 골라 볼 수 있습니다.
       </p>
 
       {/* 새 공구 등록 */}
@@ -74,9 +86,7 @@ export default async function GroupBuysPage({
             상태
             <select name="status" defaultValue="①제안접수" className={inputCls}>
               {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </label>
@@ -97,10 +107,7 @@ export default async function GroupBuysPage({
             <input name="memo" placeholder="이벤트·특이사항" className={inputCls} />
           </label>
           <div className="sm:col-span-2">
-            <button
-              type="submit"
-              className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
-            >
+            <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">
               공구 등록
             </button>
           </div>
@@ -113,66 +120,14 @@ export default async function GroupBuysPage({
         </p>
       )}
 
-      {/* 상태 필터 */}
-      <div className="mt-6 flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <Link
-            key={f.label}
-            href={`/group-buys?status=${encodeURIComponent(f.label)}`}
-            className={
-              "rounded-full px-3 py-1.5 text-sm font-medium transition " +
-              (active === f.label
-                ? "bg-indigo-600 text-white"
-                : "border border-slate-300 text-slate-600 hover:bg-slate-50")
-            }
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
-
-      {/* 목록 */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* 필터 + 목록 */}
+      <div className="mt-6">
         {rows.length === 0 ? (
-          <p className="px-5 py-12 text-center text-sm text-slate-400">
-            {active === "전체" ? "등록된 공구가 없습니다." : `‘${active}’ 상태의 공구가 없습니다.`}
-          </p>
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-400 shadow-sm">
+            아직 등록된 공구가 없습니다. 위 “＋ 새 공구 등록”으로 시작하세요.
+          </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">공구명</th>
-                <th className="px-4 py-3">기간</th>
-                <th className="px-4 py-3 text-right">제품</th>
-                <th className="px-4 py-3">상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((g) => (
-                <tr key={g.id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/group-buys/${g.id}`}
-                      className="font-medium text-slate-900 hover:text-indigo-700 hover:underline"
-                    >
-                      {g.title}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {g.start_date ?? "—"} ~ {g.end_date ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {g.group_buy_items?.[0]?.count ?? 0}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={"rounded-full px-2.5 py-0.5 text-xs font-semibold " + statusClass(g.status)}>
-                      {g.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <GroupBuyFilter rows={rows} products={allProducts} sellers={allSellers} vendors={allVendors} />
         )}
       </div>
     </div>
