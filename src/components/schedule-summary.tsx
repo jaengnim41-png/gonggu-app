@@ -14,29 +14,34 @@ export type ScheduleEntry = {
 };
 
 type Unit = "week" | "month" | "year";
-const UNIT_LABEL: Record<Unit, string> = { week: "이번주", month: "이번달", year: "올해" };
+const UNIT_LABEL: Record<Unit, string> = { week: "주간", month: "월간", year: "연간" };
 
-/** 오늘 기준 주(월~일)·월·연 범위 */
-function rangeOf(unit: Unit): [string, string] {
-  const now = new Date();
-  const y = now.getFullYear();
-  if (unit === "year") return [`${y}-01-01`, `${y}-12-31`];
-  if (unit === "month") {
-    const m = now.getMonth();
-    const first = new Date(y, m, 1);
-    const last = new Date(y, m + 1, 0);
-    return [iso(first), iso(last)];
-  }
-  // week: 월요일 시작
-  const day = (now.getDay() + 6) % 7; // 월=0
-  const mon = new Date(now);
-  mon.setDate(now.getDate() - day);
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  return [iso(mon), iso(sun)];
-}
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** 기준일(anchor)·단위로 [시작,끝]+라벨 */
+function rangeOf(unit: Unit, anchor: Date): { from: string; to: string; label: string } {
+  const y = anchor.getFullYear();
+  if (unit === "year") return { from: `${y}-01-01`, to: `${y}-12-31`, label: `${y}년` };
+  if (unit === "month") {
+    const m = anchor.getMonth();
+    return { from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)), label: `${y}년 ${m + 1}월` };
+  }
+  const day = (anchor.getDay() + 6) % 7;
+  const mon = new Date(anchor);
+  mon.setDate(anchor.getDate() - day);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = (d: Date) => `${d.getMonth() + 1}.${d.getDate()}`;
+  return { from: iso(mon), to: iso(sun), label: `${mon.getFullYear()}년 ${fmt(mon)}~${fmt(sun)}` };
+}
+function shiftDate(anchor: Date, unit: Unit, dir: number): Date {
+  const d = new Date(anchor);
+  if (unit === "week") d.setDate(d.getDate() + dir * 7);
+  else if (unit === "month") d.setMonth(d.getMonth() + dir);
+  else d.setFullYear(d.getFullYear() + dir);
+  return d;
 }
 
 function countBy(entries: ScheduleEntry[], pick: (e: ScheduleEntry) => string[]) {
@@ -49,7 +54,9 @@ function countBy(entries: ScheduleEntry[], pick: (e: ScheduleEntry) => string[])
 
 export function ScheduleSummary({ entries }: { entries: ScheduleEntry[] }) {
   const [unit, setUnit] = useState<Unit>("month");
-  const [from, to] = rangeOf(unit);
+  const [anchor, setAnchor] = useState<Date>(new Date());
+  const { from, to, label } = rangeOf(unit, anchor);
+  const isNow = from === rangeOf(unit, new Date()).from;
 
   const inRange = entries.filter((e) => e.date && e.date >= from && e.date <= to);
   const byProduct = countBy(inRange, (e) => e.products);
@@ -81,14 +88,14 @@ export function ScheduleSummary({ entries }: { entries: ScheduleEntry[] }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-slate-900">공구 일정 집계</h2>
-          <p className="text-xs text-slate-500">{UNIT_LABEL[unit]} 시작하는 공구를 제품·셀러·벤더별로 셉니다.</p>
+          <p className="text-xs text-slate-500">고른 기간에 시작하는 공구를 제품·셀러·벤더별로 셉니다.</p>
         </div>
         <div className="flex gap-1">
           {(["week", "month", "year"] as Unit[]).map((u) => (
             <button
               key={u}
               type="button"
-              onClick={() => setUnit(u)}
+              onClick={() => { setUnit(u); setAnchor(new Date()); }}
               className={
                 "rounded-md px-2.5 py-1 text-xs " +
                 (unit === u ? "bg-indigo-600 font-semibold text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50")
@@ -100,9 +107,16 @@ export function ScheduleSummary({ entries }: { entries: ScheduleEntry[] }) {
         </div>
       </div>
 
-      <p className="mt-2 text-xs text-slate-500">
-        {from} ~ {to} · 공구 {inRange.length}건
-      </p>
+      {/* 기간 이동 · 표시 */}
+      <div className="mt-2 flex items-center gap-1">
+        <button type="button" onClick={() => setAnchor(shiftDate(anchor, unit, -1))} className="rounded px-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="이전">‹</button>
+        <span className="min-w-32 text-center text-sm font-semibold text-slate-800">{label}</span>
+        <button type="button" onClick={() => setAnchor(shiftDate(anchor, unit, 1))} className="rounded px-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="다음">›</button>
+        {!isNow && (
+          <button type="button" onClick={() => setAnchor(new Date())} className="ml-1 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">오늘</button>
+        )}
+        <span className="ml-2 text-xs text-slate-400">{from} ~ {to} · 공구 {inRange.length}건</span>
+      </div>
 
       <div className="mt-3 grid gap-4 sm:grid-cols-3">
         <Panel title="제품별" rows={byProduct} empty="이 기간 공구 없음" />
@@ -112,7 +126,7 @@ export function ScheduleSummary({ entries }: { entries: ScheduleEntry[] }) {
 
       {inRange.length > 0 && (
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{UNIT_LABEL[unit]} 공구 목록</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label} 공구 목록</h3>
           <ul className="mt-2 divide-y divide-slate-100">
             {inRange
               .slice()

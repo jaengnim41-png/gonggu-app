@@ -28,18 +28,35 @@ function statusClass(s: string) {
 function iso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function rangeOf(p: Period): [string, string] | null {
+
+/** 기준일(anchor)과 단위로 [시작, 끝] 범위 + 사람이 읽는 라벨을 만든다 */
+function rangeOf(p: Period, anchor: Date): { from: string; to: string; label: string } | null {
   if (p === "all") return null;
-  const now = new Date();
-  const y = now.getFullYear();
-  if (p === "year") return [`${y}-01-01`, `${y}-12-31`];
-  if (p === "month") return [iso(new Date(y, now.getMonth(), 1)), iso(new Date(y, now.getMonth() + 1, 0))];
-  const day = (now.getDay() + 6) % 7;
-  const mon = new Date(now);
-  mon.setDate(now.getDate() - day);
+  const y = anchor.getFullYear();
+  if (p === "year") {
+    return { from: `${y}-01-01`, to: `${y}-12-31`, label: `${y}년` };
+  }
+  if (p === "month") {
+    const m = anchor.getMonth();
+    return { from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)), label: `${y}년 ${m + 1}월` };
+  }
+  // week: 월~일
+  const day = (anchor.getDay() + 6) % 7;
+  const mon = new Date(anchor);
+  mon.setDate(anchor.getDate() - day);
   const sun = new Date(mon);
   sun.setDate(mon.getDate() + 6);
-  return [iso(mon), iso(sun)];
+  const fmt = (d: Date) => `${d.getMonth() + 1}.${d.getDate()}`;
+  return { from: iso(mon), to: iso(sun), label: `${mon.getFullYear()}년 ${fmt(mon)}~${fmt(sun)}` };
+}
+
+/** anchor를 단위만큼 이동 */
+function shift(anchor: Date, p: Period, dir: number): Date {
+  const d = new Date(anchor);
+  if (p === "week") d.setDate(d.getDate() + dir * 7);
+  else if (p === "month") d.setMonth(d.getMonth() + dir);
+  else if (p === "year") d.setFullYear(d.getFullYear() + dir);
+  return d;
 }
 
 export function GroupBuyFilter({
@@ -54,15 +71,16 @@ export function GroupBuyFilter({
   vendors: string[];
 }) {
   const [period, setPeriod] = useState<Period>("all");
+  const [anchor, setAnchor] = useState<Date>(new Date());
   const [product, setProduct] = useState("");
   const [seller, setSeller] = useState("");
   const [vendor, setVendor] = useState("");
 
-  const range = rangeOf(period);
+  const range = rangeOf(period, anchor);
   const filtered = rows.filter((g) => {
     if (range) {
       const d = g.start_date ?? g.end_date;
-      if (!d || d < range[0] || d > range[1]) return false;
+      if (!d || d < range.from || d > range.to) return false;
     }
     if (product && !g.products.includes(product)) return false;
     if (seller && !g.sellers.includes(seller)) return false;
@@ -71,6 +89,10 @@ export function GroupBuyFilter({
   });
 
   const selCls = "rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm";
+  const isToday = (() => {
+    const r = rangeOf(period, new Date());
+    return range && r && range.from === r.from;
+  })();
 
   return (
     <div>
@@ -81,7 +103,7 @@ export function GroupBuyFilter({
             <button
               key={p}
               type="button"
-              onClick={() => setPeriod(p)}
+              onClick={() => { setPeriod(p); setAnchor(new Date()); }}
               className={
                 "rounded-md px-2.5 py-1 text-xs " +
                 (period === p ? "bg-indigo-600 font-semibold text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50")
@@ -91,6 +113,19 @@ export function GroupBuyFilter({
             </button>
           ))}
         </div>
+
+        {/* 기간 이동 · 표시 */}
+        {range && (
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1">
+            <button type="button" onClick={() => setAnchor(shift(anchor, period, -1))} className="rounded px-1.5 text-slate-500 hover:bg-white hover:text-slate-800" title="이전">‹</button>
+            <span className="min-w-28 text-center text-sm font-semibold text-slate-800">{range.label}</span>
+            <button type="button" onClick={() => setAnchor(shift(anchor, period, 1))} className="rounded px-1.5 text-slate-500 hover:bg-white hover:text-slate-800" title="다음">›</button>
+            {!isToday && (
+              <button type="button" onClick={() => setAnchor(new Date())} className="ml-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">오늘</button>
+            )}
+          </div>
+        )}
+
         <select value={product} onChange={(e) => setProduct(e.target.value)} className={selCls}>
           <option value="">제품 전체</option>
           {products.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -106,7 +141,7 @@ export function GroupBuyFilter({
         {(period !== "all" || product || seller || vendor) && (
           <button
             type="button"
-            onClick={() => { setPeriod("all"); setProduct(""); setSeller(""); setVendor(""); }}
+            onClick={() => { setPeriod("all"); setAnchor(new Date()); setProduct(""); setSeller(""); setVendor(""); }}
             className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
           >
             초기화
