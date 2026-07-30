@@ -10,6 +10,7 @@ export type GBRow = {
   start_date: string | null;
   end_date: string | null;
   itemCount: number;
+  revenue: number;
   products: string[];
   sellers: string[];
   vendors: string[];
@@ -17,6 +18,18 @@ export type GBRow = {
 
 type Period = "all" | "week" | "month" | "year";
 const PERIOD_LABEL: Record<Period, string> = { all: "전체 기간", week: "주간", month: "월간", year: "연간" };
+
+/** 상태 묶음 필터 */
+const STATUS_GROUPS: { label: string; match: string[] }[] = [
+  { label: "전체", match: [] },
+  { label: "준비중", match: ["제안접수", "제안서전달", "조건협의", "셀러승인", "샘플발송", "콘텐츠제작"] },
+  { label: "진행중", match: ["공구오픈", "진행중"] },
+  { label: "정산", match: ["공구종료", "정산대기", "최종정산"] },
+  { label: "완료", match: ["완료"] },
+];
+function won(n: number) {
+  return "₩" + Math.round(n).toLocaleString("ko-KR");
+}
 
 function statusClass(s: string) {
   if (s.includes("진행중")) return "bg-indigo-50 text-indigo-700";
@@ -64,29 +77,43 @@ export function GroupBuyFilter({
   products,
   sellers,
   vendors,
+  initialStatus = "",
+  initialProduct = "",
+  initialSeller = "",
+  initialVendor = "",
 }: {
   rows: GBRow[];
   products: string[];
   sellers: string[];
   vendors: string[];
+  initialStatus?: string;
+  initialProduct?: string;
+  initialSeller?: string;
+  initialVendor?: string;
 }) {
   const [period, setPeriod] = useState<Period>("all");
   const [anchor, setAnchor] = useState<Date>(new Date());
-  const [product, setProduct] = useState("");
-  const [seller, setSeller] = useState("");
-  const [vendor, setVendor] = useState("");
+  const [statusGroup, setStatusGroup] = useState(
+    STATUS_GROUPS.some((g) => g.label === initialStatus) ? initialStatus : "전체"
+  );
+  const [product, setProduct] = useState(initialProduct);
+  const [seller, setSeller] = useState(initialSeller);
+  const [vendor, setVendor] = useState(initialVendor);
 
   const range = rangeOf(period, anchor);
+  const statusMatch = STATUS_GROUPS.find((g) => g.label === statusGroup)?.match ?? [];
   const filtered = rows.filter((g) => {
     if (range) {
       const d = g.start_date ?? g.end_date;
       if (!d || d < range.from || d > range.to) return false;
     }
+    if (statusMatch.length && !statusMatch.some((m) => g.status.includes(m))) return false;
     if (product && !g.products.includes(product)) return false;
     if (seller && !g.sellers.includes(seller)) return false;
     if (vendor && !g.vendors.includes(vendor)) return false;
     return true;
   });
+  const totalRevenue = filtered.reduce((s, g) => s + g.revenue, 0);
 
   const selCls = "rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm";
   const isToday = (() => {
@@ -96,6 +123,23 @@ export function GroupBuyFilter({
 
   return (
     <div>
+      {/* 상태 필터 */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {STATUS_GROUPS.map((g) => (
+          <button
+            key={g.label}
+            type="button"
+            onClick={() => setStatusGroup(g.label)}
+            className={
+              "rounded-full px-3 py-1.5 text-sm font-medium transition " +
+              (statusGroup === g.label ? "bg-indigo-600 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50")
+            }
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+
       {/* 필터 바 */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex gap-1">
@@ -138,16 +182,18 @@ export function GroupBuyFilter({
           <option value="">벤더 전체</option>
           {vendors.map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        {(period !== "all" || product || seller || vendor) && (
+        {(period !== "all" || statusGroup !== "전체" || product || seller || vendor) && (
           <button
             type="button"
-            onClick={() => { setPeriod("all"); setAnchor(new Date()); setProduct(""); setSeller(""); setVendor(""); }}
+            onClick={() => { setPeriod("all"); setAnchor(new Date()); setStatusGroup("전체"); setProduct(""); setSeller(""); setVendor(""); }}
             className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
           >
             초기화
           </button>
         )}
-        <span className="ml-auto text-xs text-slate-500">{filtered.length}건</span>
+        <span className="ml-auto text-xs text-slate-500">
+          {filtered.length}건 · 매출 <span className="font-semibold text-slate-700">{won(totalRevenue)}</span>
+        </span>
       </div>
 
       {/* 목록 */}
@@ -163,6 +209,7 @@ export function GroupBuyFilter({
                   <th className="px-4 py-3">기간</th>
                   <th className="px-4 py-3">제품</th>
                   <th className="px-4 py-3">셀러 / 벤더</th>
+                  <th className="px-4 py-3 text-right">매출</th>
                   <th className="px-4 py-3">상태</th>
                 </tr>
               </thead>
@@ -189,6 +236,7 @@ export function GroupBuyFilter({
                         </>
                       ) : <span className="text-slate-300">—</span>}
                     </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{g.revenue ? won(g.revenue) : "—"}</td>
                     <td className="px-4 py-3">
                       <span className={"rounded-full px-2.5 py-0.5 text-xs font-semibold " + statusClass(g.status)}>{g.status}</span>
                     </td>

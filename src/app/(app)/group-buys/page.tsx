@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { calcGroupBuyTotals, type TotalsItem, type TotalsOrder } from "@/lib/group-buys/totals";
 import { createGroupBuy } from "./actions";
 import { GroupBuyFilter, type GBRow } from "./group-buy-filter";
 
@@ -11,21 +12,27 @@ const STATUS_OPTIONS = [
 export default async function GroupBuysPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; status?: string; product?: string; seller?: string; vendor?: string }>;
 }) {
   const sp = await searchParams;
 
   const supabase = await createClient();
-  const [{ data: gbData }, { data: itemData }, { data: gbcData }, { data: contactData }] =
+  const [{ data: gbData }, { data: itemData }, { data: gbcData }, { data: contactData }, { data: orderData }] =
     await Promise.all([
       supabase
         .from("group_buys")
         .select("id, title, status, start_date, end_date")
         .order("start_date", { ascending: false, nullsFirst: false }),
-      supabase.from("group_buy_items").select("group_buy_id, product_name"),
+      supabase
+        .from("group_buy_items")
+        .select("id, group_buy_id, product_name, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
       supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
       supabase.from("contacts").select("id, name"),
+      supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
     ]);
+
+  // 공구별 매출(직접 입력분 포함 — 공통 규칙)
+  const totals = calcGroupBuyTotals((itemData ?? []) as TotalsItem[], (orderData ?? []) as TotalsOrder[]);
 
   const contactName = new Map(((contactData ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
   const productsByGb = new Map<string, Set<string>>();
@@ -53,6 +60,7 @@ export default async function GroupBuysPage({
     start_date: g.start_date,
     end_date: g.end_date,
     itemCount: itemCountByGb.get(g.id) ?? 0,
+    revenue: totals.get(g.id)?.revenue ?? 0,
     products: [...(productsByGb.get(g.id) ?? [])],
     sellers: sellersByGb.get(g.id) ?? [],
     vendors: vendorsByGb.get(g.id) ?? [],
@@ -127,7 +135,16 @@ export default async function GroupBuysPage({
             아직 등록된 공구가 없습니다. 위 “＋ 새 공구 등록”으로 시작하세요.
           </div>
         ) : (
-          <GroupBuyFilter rows={rows} products={allProducts} sellers={allSellers} vendors={allVendors} />
+          <GroupBuyFilter
+            rows={rows}
+            products={allProducts}
+            sellers={allSellers}
+            vendors={allVendors}
+            initialStatus={sp.status ?? ""}
+            initialProduct={sp.product ?? ""}
+            initialSeller={sp.seller ?? ""}
+            initialVendor={sp.vendor ?? ""}
+          />
         )}
       </div>
     </div>

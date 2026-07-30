@@ -98,20 +98,30 @@ export default async function DashboardPage() {
   const productRank = [...revenueByProduct.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const recentGbs = groupBuys.slice(0, 6);
 
-  const stat = (label: string, value: string, sub?: string) => (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-bold text-slate-900">{value}</div>
-      {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
-    </div>
-  );
+  const stat = (label: string, value: string, sub?: string, href?: string) => {
+    const inner = (
+      <>
+        <div className="text-xs text-slate-500">{label}</div>
+        <div className="mt-1 text-xl font-bold text-slate-900">{value}</div>
+        {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
+        {href && <div className="mt-1 text-[11px] font-medium text-indigo-600">자세히 →</div>}
+      </>
+    );
+    return href ? (
+      <Link href={href} className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-400 hover:shadow">
+        {inner}
+      </Link>
+    ) : (
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">{inner}</div>
+    );
+  };
 
   const statusPill = (s: string) => {
     const cls =
-      s === "진행중" ? "bg-indigo-50 text-indigo-700"
-      : s === "예정" ? "bg-emerald-50 text-emerald-700"
-      : s === "정산대기" ? "bg-amber-50 text-amber-700"
-      : "bg-slate-100 text-slate-600";
+      s.includes("진행중") || s.includes("공구오픈") ? "bg-indigo-50 text-indigo-700"
+      : s.includes("정산") || s.includes("종료") ? "bg-amber-50 text-amber-700"
+      : s.includes("완료") ? "bg-slate-100 text-slate-600"
+      : "bg-emerald-50 text-emerald-700";
     return <span className={"rounded-full px-2 py-0.5 text-xs font-semibold " + cls}>{s}</span>;
   };
 
@@ -120,12 +130,12 @@ export default async function DashboardPage() {
       <h1 className="text-lg font-bold text-slate-900">{company?.name} 대시보드</h1>
       <p className="mt-1 text-sm text-slate-500">공구·매출 현황을 한눈에 봅니다.</p>
 
-      {/* 요약 카드 */}
+      {/* 요약 카드 (누르면 해당 목록으로) */}
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {stat("누적 매출", won(totalRevenue), "살아있는 주문 기준")}
-        {stat("진행 중 공구", statusCount("진행중") + "건", "예정 " + statusCount("예정"))}
-        {stat("정산 대기", statusCount("정산대기") + "건")}
-        {stat("전체 공구", groupBuys.length + "건")}
+        {stat("누적 매출", won(totalRevenue), "살아있는 주문 기준", "/group-buys")}
+        {stat("진행 중 공구", statusCount("진행중") + "건", "공구오픈 포함", "/group-buys?status=진행중")}
+        {stat("정산 대기", statusCount("정산대기") + "건", undefined, "/group-buys?status=정산")}
+        {stat("전체 공구", groupBuys.length + "건", undefined, "/group-buys?status=전체")}
       </div>
 
       {/* 공구 일정 집계 (제품·셀러·벤더별 · 주/월/연) */}
@@ -145,12 +155,14 @@ export default async function DashboardPage() {
             ) : (
               <ul>
                 {productRank.map(([name, rev], i) => (
-                  <li key={name} className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0">
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-indigo-50 text-xs font-bold text-indigo-700">
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 text-sm text-slate-800">{name}</span>
-                    <span className="text-sm font-semibold tabular-nums">{won(rev)}</span>
+                  <li key={name} className="border-b border-slate-100 last:border-0">
+                    <Link href={`/group-buys?product=${encodeURIComponent(name)}`} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                      <span className="flex h-5 w-5 items-center justify-center rounded bg-indigo-50 text-xs font-bold text-indigo-700">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1 text-sm text-slate-800">{name}</span>
+                      <span className="text-sm font-semibold tabular-nums">{won(rev)}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>
