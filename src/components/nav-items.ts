@@ -4,6 +4,7 @@ export type NavItem = { href: string; label: string; icon: string; match?: strin
 export const NAV: NavItem[] = [
   { href: "/dashboard", label: "대시보드", icon: "▤" },
   { href: "/group-buys", label: "공구", icon: "▥" },
+  { href: "/calendar", label: "캘린더", icon: "▦" },
   { href: "/messages", label: "메시지", icon: "✉" },
   { href: "/products", label: "제품·재고", icon: "▧", match: ["/products", "/inventory"] },
   { href: "/sellers", label: "셀러", icon: "◍" },
