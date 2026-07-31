@@ -2,17 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const NAV: { href: string; label: string; icon: string; match?: string[] }[] = [
-  { href: "/dashboard", label: "대시보드", icon: "▤" },
-  { href: "/group-buys", label: "공구", icon: "▥" },
-  { href: "/messages", label: "메시지", icon: "✉" },
-  { href: "/products", label: "제품·재고", icon: "▧", match: ["/products", "/inventory"] },
-  { href: "/sellers", label: "셀러", icon: "◍" },
-  { href: "/vendors", label: "벤더", icon: "◒" },
-  { href: "/samples", label: "샘플", icon: "◈" },
-  { href: "/proposals", label: "제안서", icon: "▤" },
-];
+import { NAV, isActive } from "./nav-items";
 
 export function Sidebar({
   unreadMessages = 0,
@@ -38,10 +28,7 @@ export function Sidebar({
       </div>
       <nav className="flex flex-col gap-1">
         {NAV.map((item) => {
-          const targets = item.match ?? [item.href];
-          const active = targets.some(
-            (t) => pathname === t || pathname.startsWith(t + "/")
-          );
+          const active = isActive(pathname, item);
           const badge = badgeFor(item.href);
           return (
             <Link
