@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
+import { ConfirmButton } from "@/components/confirm-button";
 import { addOption, deleteOption } from "../actions";
 
 type Product = {
@@ -198,12 +199,12 @@ export default async function ProductDetailPage({
                     <form action={deleteOption}>
                       <input type="hidden" name="id" value={o.id} />
                       <input type="hidden" name="product_id" value={product.id} />
-                      <button
-                        type="submit"
+                      <ConfirmButton
+                        message={`옵션 '${o.name}'을 삭제할까요?`}
                         className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:border-rose-300 hover:text-rose-600"
                       >
                         삭제
-                      </button>
+                      </ConfirmButton>
                     </form>
                   </td>
                 </tr>

@@ -18,6 +18,7 @@ import {
   updateItem,
 } from "../actions";
 import { CopyLink } from "@/components/copy-link";
+import { ConfirmButton } from "@/components/confirm-button";
 import { SalesTable, type SalesRow } from "./sales-table";
 import { openThread } from "../../messages/actions";
 
@@ -613,12 +614,12 @@ export default async function GroupBuyDetailPage({
                         <form action={deleteItem}>
                           <input type="hidden" name="id" value={it.id} />
                           <input type="hidden" name="group_buy_id" value={gb.id} />
-                          <button
-                            type="submit"
+                          <ConfirmButton
+                            message={`'${it.product_name}' 공구상품을 삭제할까요? 이 상품의 판매·정산 집계가 사라집니다.`}
                             className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 transition hover:border-rose-300 hover:text-rose-600"
                           >
                             삭제
-                          </button>
+                          </ConfirmButton>
                         </form>
                       </div>
                     </td>

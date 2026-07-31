@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { updateSample, toggleReturned, deleteSample } from "./actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export type SampleRow = {
   id: string;
@@ -101,7 +102,7 @@ export function SampleTable({
                       <form action={deleteSample}>
                         <input type="hidden" name="id" value={s.id} />
                         <input type="hidden" name="back" value={back} />
-                        <button type="submit" className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</button>
+                        <ConfirmButton message="이 샘플 발송 기록을 삭제할까요?" className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</ConfirmButton>
                       </form>
                     </div>
                   </td>

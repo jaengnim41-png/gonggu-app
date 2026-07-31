@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CopyLink } from "@/components/copy-link";
+import { ConfirmButton } from "@/components/confirm-button";
 import { calcRow, won, pct } from "@/lib/proposals/calc";
 import {
   addProposalItem,
@@ -267,9 +268,9 @@ export default async function ProposalEditor({
 
       <form action={deleteProposal} className="mt-6">
         <input type="hidden" name="id" value={proposal.id} />
-        <button className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">
+        <ConfirmButton message={`'${proposal.title}' 제안서를 삭제할까요? 담긴 품목과 공유 링크도 사라집니다.`} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">
           이 제안서 삭제
-        </button>
+        </ConfirmButton>
       </form>
     </div>
   );

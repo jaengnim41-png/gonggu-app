@@ -5,6 +5,7 @@ import { getSessionProfile } from "@/lib/data/profile";
 import { Poller } from "@/components/poller";
 import { MessageComposer } from "@/components/message-composer";
 import { CopyLink } from "@/components/copy-link";
+import { ConfirmButton } from "@/components/confirm-button";
 import { sendMessage, markThreadRead, startThread, deleteThread } from "./actions";
 import {
   createGuestLink,
@@ -201,13 +202,13 @@ export default async function MessagesPage({
                         </Link>
                         <form action={deleteThread} className="pr-2">
                           <input type="hidden" name="thread_id" value={t.id} />
-                          <button
-                            type="submit"
+                          <ConfirmButton
+                            message={`'${threadTitle(t)}' 대화방을 삭제할까요? 대화 내용도 함께 사라집니다.`}
                             title="대화방 삭제"
                             className="rounded-md px-1.5 py-1 text-xs text-slate-300 hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"
                           >
                             ✕
-                          </button>
+                          </ConfirmButton>
                         </form>
                       </div>
                     </li>
@@ -241,9 +242,9 @@ export default async function MessagesPage({
                   )}
                   <form action={deleteThread} className="ml-auto">
                     <input type="hidden" name="thread_id" value={current.id} />
-                    <button type="submit" className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-500 hover:border-rose-300 hover:text-rose-600">
+                    <ConfirmButton message={`'${threadTitle(current)}' 대화방을 삭제할까요? 대화 내용도 함께 사라집니다.`} className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-500 hover:border-rose-300 hover:text-rose-600">
                       대화방 삭제
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </div>
 

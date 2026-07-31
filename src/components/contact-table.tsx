@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { updateContact, deleteContact, moveContact } from "@/app/(app)/contacts/actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export type ContactRow = {
   id: string;
@@ -118,7 +119,7 @@ export function ContactTable({
                       <form action={deleteContact}>
                         <input type="hidden" name="id" value={c.id} />
                         <input type="hidden" name="kind" value={kind} />
-                        <button type="submit" className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</button>
+                        <ConfirmButton message={`'${c.name}' ${kind}를 삭제할까요? 연결·실적 기록도 사라집니다.`} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</ConfirmButton>
                       </form>
                     </div>
                   </td>

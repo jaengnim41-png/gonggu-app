@@ -3,6 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { updateProduct, deleteProduct, moveProduct } from "./actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export type ProductRow = {
   id: string;
@@ -93,12 +94,12 @@ export function ProductTable({ products }: { products: ProductRow[] }) {
                     </button>
                     <form action={deleteProduct}>
                       <input type="hidden" name="id" value={p.id} />
-                      <button
-                        type="submit"
+                      <ConfirmButton
+                        message={`'${p.name}' 제품을 삭제할까요? 하위 옵션도 함께 지워집니다.`}
                         className="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600"
                       >
                         삭제
-                      </button>
+                      </ConfirmButton>
                     </form>
                   </div>
                 </td>

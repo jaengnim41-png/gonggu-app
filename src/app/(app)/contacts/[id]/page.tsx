@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { CopyLink } from "@/components/copy-link";
+import { ConfirmButton } from "@/components/confirm-button";
 import { SampleForm } from "@/components/sample-form";
 import { createSample } from "../../samples/actions";
 import {
@@ -635,7 +636,7 @@ export default async function ContactDetailPage({
                         <form action={deleteVendorManager}>
                           <input type="hidden" name="id" value={m.id} />
                           <input type="hidden" name="back" value={`/contacts/${contact.id}`} />
-                          <button className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</button>
+                          <ConfirmButton message={`담당자 '${m.name}'를 삭제할까요?`} className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600">삭제</ConfirmButton>
                         </form>
                       </td>
                     </tr>
@@ -698,12 +699,12 @@ export default async function ContactDetailPage({
         <form action={deleteContact} className="mt-4 border-t border-slate-100 pt-4">
           <input type="hidden" name="id" value={contact.id} />
           <input type="hidden" name="kind" value={contact.kind} />
-          <button
-            type="submit"
+          <ConfirmButton
+            message={`'${contact.name}' ${contact.kind}를 삭제할까요? 연결·실적·초대 기록도 사라집니다.`}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600"
           >
             이 {contact.kind} 삭제
-          </button>
+          </ConfirmButton>
         </form>
       </details>
     </div>
