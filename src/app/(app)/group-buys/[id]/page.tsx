@@ -6,6 +6,7 @@ import { isLive } from "@/lib/orders/parse";
 import {
   addItem,
   deleteItem,
+  deleteGroupBuy,
   uploadOrders,
   startSettlement,
   saveFeeRate,
@@ -788,6 +789,17 @@ export default async function GroupBuyDetailPage({
           </p>
         </div>
       )}
+
+      {/* 공구 삭제 */}
+      <form action={deleteGroupBuy} className="mt-8 border-t border-slate-100 pt-4">
+        <input type="hidden" name="id" value={gb.id} />
+        <ConfirmButton
+          message={`'${gb.title}' 공구를 삭제할까요? 공구상품·주문·판매현황·정산이 모두 사라지고 되돌릴 수 없습니다.`}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:border-rose-300 hover:text-rose-600"
+        >
+          이 공구 삭제
+        </ConfirmButton>
+      </form>
     </div>
   );
 }
