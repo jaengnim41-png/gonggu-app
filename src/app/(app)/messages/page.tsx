@@ -127,7 +127,7 @@ export default async function MessagesPage({
   const contactsForNew = allContacts; // 셀러+벤더 모두 새 대화 대상
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <Poller intervalMs={5000} />
       <h1 className="text-lg font-bold text-slate-900">메시지</h1>
       <p className="mt-1 text-sm text-slate-500">

@@ -82,7 +82,7 @@ export default async function ProductDetailPage({
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <Link href="/products" className="text-sm text-slate-500 hover:underline">
         ← 제품 목록
       </Link>

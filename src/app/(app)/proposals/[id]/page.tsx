@@ -93,7 +93,7 @@ export default async function ProposalEditor({
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <Link href="/proposals" className="text-sm text-slate-500 hover:text-indigo-600">← 제안서 목록</Link>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">

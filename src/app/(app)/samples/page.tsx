@@ -150,7 +150,7 @@ export default async function SamplesPage({ searchParams }: { searchParams: Prom
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <h1 className="text-lg font-bold text-slate-900">샘플</h1>
       <p className="mt-1 text-sm text-slate-500">
         셀러·벤더에게 보낸 샘플을 기록합니다. 기간·거래처·제품으로 걸러 보고, 기간 단위로 집계할 수 있습니다.

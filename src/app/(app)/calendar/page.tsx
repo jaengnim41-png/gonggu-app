@@ -40,7 +40,7 @@ export default async function CalendarPage() {
   }));
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <h1 className="text-lg font-bold text-slate-900">캘린더</h1>
       <p className="mt-1 text-sm text-slate-500">
         공구 일정을 달력으로 봅니다. 진행 기간 내내 칸에 표시되고, 막대에 셀러·제품이 함께 나옵니다.

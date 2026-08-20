@@ -14,7 +14,7 @@ function keyOf(pno: string | null, opt: string | null) {
 export async function addStockIn(formData: FormData) {
   const optionId = String(formData.get("product_option_id") ?? "");
   const qty = parseInt(String(formData.get("quantity") ?? "").replace(/,/g, ""), 10);
-  if (!optionId || !Number.isFinite(qty)) redirect("/inventory?error=input");
+  if (!optionId || !Number.isFinite(qty)) redirect("/products?error=input");
 
   const { company } = await getSessionProfile();
   if (!company) redirect("/onboarding");
@@ -26,9 +26,9 @@ export async function addStockIn(formData: FormData) {
     quantity: qty,
     note: String(formData.get("note") ?? "").trim() || null,
   });
-  if (error) redirect("/inventory?error=save");
-  revalidatePath("/inventory");
-  redirect("/inventory");
+  if (error) redirect("/products?error=save");
+  revalidatePath("/products");
+  redirect("/products");
 }
 
 /**
@@ -38,7 +38,7 @@ export async function addStockIn(formData: FormData) {
 export async function setStockLevel(formData: FormData) {
   const optionId = String(formData.get("product_option_id") ?? "");
   const target = parseInt(String(formData.get("target") ?? "").replace(/,/g, ""), 10);
-  if (!optionId || !Number.isFinite(target)) redirect("/inventory?error=input");
+  if (!optionId || !Number.isFinite(target)) redirect("/products?error=input");
 
   const { company } = await getSessionProfile();
   if (!company) redirect("/onboarding");
@@ -67,17 +67,17 @@ export async function setStockLevel(formData: FormData) {
       quantity: diff,
       note: "재고 직접 수정",
     });
-    if (error) redirect("/inventory?error=save");
+    if (error) redirect("/products?error=save");
   }
-  revalidatePath("/inventory");
-  redirect("/inventory");
+  revalidatePath("/products");
+  redirect("/products");
 }
 
 /** 전체 주문 파일 업로드 → 재고 차감(멱등). 아는 옵션은 자동 매칭. */
 export async function uploadInventoryOrders(formData: FormData) {
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    redirect("/inventory?uerror=file");
+    redirect("/products?ierror=file");
   }
 
   const { company } = await getSessionProfile();
@@ -95,7 +95,7 @@ export async function uploadInventoryOrders(formData: FormData) {
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const parsed = parseOrderWorkbook(bytes);
-  if (parsed.length === 0) redirect("/inventory?uerror=empty");
+  if (parsed.length === 0) redirect("/products?ierror=empty");
 
   const rows = parsed.map((o) => ({
     company_id: company.id,
@@ -111,10 +111,10 @@ export async function uploadInventoryOrders(formData: FormData) {
   const { error } = await supabase
     .from("inventory_orders")
     .upsert(rows, { onConflict: "company_id,product_order_no" });
-  if (error) redirect("/inventory?uerror=save");
+  if (error) redirect("/products?ierror=save");
 
-  revalidatePath("/inventory");
-  redirect(`/inventory?uok=${rows.length}`);
+  revalidatePath("/products");
+  redirect(`/products?iok=${rows.length}`);
 }
 
 /** 옵션 연결 도우미: 주문 옵션글자 ↔ 제품옵션 연결(기억) + 기존 주문에 소급 적용 */
@@ -122,7 +122,7 @@ export async function linkOption(formData: FormData) {
   const storeNo = String(formData.get("store_product_no") ?? "").trim();
   const optionInfo = String(formData.get("option_info") ?? "").trim();
   const optionId = String(formData.get("product_option_id") ?? "");
-  if (!optionId) redirect("/inventory?error=input");
+  if (!optionId) redirect("/products?error=input");
 
   const { company } = await getSessionProfile();
   if (!company) redirect("/onboarding");
@@ -147,6 +147,6 @@ export async function linkOption(formData: FormData) {
     .eq("store_product_no", storeNo)
     .eq("option_info", optionInfo);
 
-  revalidatePath("/inventory");
-  redirect("/inventory");
+  revalidatePath("/products");
+  redirect("/products");
 }

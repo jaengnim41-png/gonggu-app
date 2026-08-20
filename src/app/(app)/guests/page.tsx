@@ -78,7 +78,7 @@ export default async function GuestsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <h1 className="text-lg font-bold text-slate-900">게스트 승인</h1>
       <p className="mt-1 text-sm text-slate-500">
         초대 링크로 들어온 사람입니다. <b>승인해야만</b> 공구 일정·판매현황·정산서·메시지를 볼 수 있습니다.

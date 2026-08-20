@@ -279,7 +279,7 @@ export default async function GroupBuyDetailPage({
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <Link href="/group-buys" className="text-sm text-slate-500 hover:underline">
         ← 공구 목록
       </Link>

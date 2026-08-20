@@ -42,7 +42,7 @@ export default async function ProposalsPage({
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-bold text-slate-900">제안서</h1>
         <Link

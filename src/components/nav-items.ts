@@ -6,7 +6,7 @@ export const NAV: NavItem[] = [
   { href: "/group-buys", label: "공구", icon: "▥" },
   { href: "/calendar", label: "캘린더", icon: "▦" },
   { href: "/messages", label: "메시지", icon: "✉" },
-  { href: "/products", label: "제품·재고", icon: "▧", match: ["/products", "/inventory"] },
+  { href: "/products", label: "제품·재고", icon: "▧" },
   { href: "/sellers", label: "셀러", icon: "◍" },
   { href: "/vendors", label: "벤더", icon: "◒" },
   { href: "/samples", label: "샘플", icon: "◈" },

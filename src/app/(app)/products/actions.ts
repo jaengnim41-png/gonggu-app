@@ -300,9 +300,6 @@ export async function bulkUploadProducts(formData: FormData) {
     await supabase.from("stock_ins").insert(adjustRows);
   }
 
-  const back = str(formData.get("back"));
   revalidatePath("/products");
-  revalidatePath("/inventory");
-  if (back) redirect(`${back}?pok=${newProducts}-${optionsUpserted}-${stockAdjust.length}`);
-  redirect(`/products?uok=${newProducts}-${optionsUpserted}`);
+  redirect(`/products?uok=${newProducts}-${optionsUpserted}-${stockAdjust.length}`);
 }
