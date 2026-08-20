@@ -126,12 +126,24 @@ export default async function DashboardPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-10">
-      <h1 className="text-lg font-bold text-slate-900">{company?.name} 대시보드</h1>
-      <p className="mt-1 text-sm text-slate-500">공구·매출 현황을 한눈에 봅니다.</p>
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
+      {/* 헤더: 제목 + 우측 내보내기 (넓은 화면 가로 공간 활용) */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold text-slate-900">{company?.name} 대시보드</h1>
+          <p className="mt-1 text-sm text-slate-500">공구·매출 현황을 한눈에 봅니다.</p>
+        </div>
+        <a
+          href="/api/export"
+          className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+          title="제품·공구·주문·정산 전체를 엑셀 한 파일로"
+        >
+          전체 엑셀 내보내기
+        </a>
+      </div>
 
       {/* 요약 카드 (누르면 해당 목록으로) */}
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stat("누적 매출", won(totalRevenue), "살아있는 주문 기준", "/group-buys")}
         {stat("진행 중 공구", statusCount("진행중") + "건", "공구오픈 포함", "/group-buys?status=진행중")}
         {stat("정산 대기", statusCount("정산대기") + "건", undefined, "/group-buys?status=정산")}
@@ -143,7 +155,8 @@ export default async function DashboardPage() {
         <ScheduleSummary entries={scheduleEntries} />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      {/* 하단 3열: 제품별 매출 · 최근 공구 · 바로가기 (태블릿 2열, 넓은 화면 3열) */}
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* 제품별 매출 랭킹 */}
         <div>
           <h2 className="text-sm font-bold text-slate-900">제품별 매출 🏆</h2>
@@ -160,7 +173,7 @@ export default async function DashboardPage() {
                       <span className="flex h-5 w-5 items-center justify-center rounded bg-indigo-50 text-xs font-bold text-indigo-700">
                         {i + 1}
                       </span>
-                      <span className="flex-1 text-sm text-slate-800">{name}</span>
+                      <span className="flex-1 truncate text-sm text-slate-800">{name}</span>
                       <span className="text-sm font-semibold tabular-nums">{won(rev)}</span>
                     </Link>
                   </li>
@@ -191,31 +204,23 @@ export default async function DashboardPage() {
             )}
           </div>
         </div>
-      </div>
 
-      {/* 바로가기 */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        {[
-          { href: "/group-buys", label: "공구 관리 →", desc: "공구·배정·판매현황·정산" },
-          { href: "/products", label: "제품 관리 →", desc: "제품·하위 옵션" },
-          { href: "/inventory", label: "재고 관리 →", desc: "전체 주문 업로드·자동 차감" },
-        ].map((c) => (
-          <a key={c.href} href={c.href} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-400">
-            <div className="text-sm font-semibold text-slate-900">{c.label}</div>
-            <p className="mt-1 text-xs text-slate-500">{c.desc}</p>
-          </a>
-        ))}
-      </div>
-
-      {/* 데이터 내보내기 */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* 바로가기 (세로 스택 — 옆 두 목록과 높이 균형) */}
         <div>
-          <div className="text-sm font-semibold text-slate-900">데이터 내보내기 · 백업</div>
-          <p className="mt-1 text-xs text-slate-500">제품·공구·주문·정산 전체를 엑셀 한 파일로 내려받습니다.</p>
+          <h2 className="text-sm font-bold text-slate-900">바로가기</h2>
+          <div className="mt-3 space-y-3">
+            {[
+              { href: "/group-buys", label: "공구 관리 →", desc: "공구·배정·판매현황·정산" },
+              { href: "/products", label: "제품 관리 →", desc: "제품·하위 옵션" },
+              { href: "/inventory", label: "재고 관리 →", desc: "전체 주문 업로드·자동 차감" },
+            ].map((c) => (
+              <a key={c.href} href={c.href} className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-400 hover:shadow">
+                <div className="text-sm font-semibold text-slate-900">{c.label}</div>
+                <p className="mt-1 text-xs text-slate-500">{c.desc}</p>
+              </a>
+            ))}
+          </div>
         </div>
-        <a href="/api/export" className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">
-          전체 엑셀 내보내기
-        </a>
       </div>
     </div>
   );
