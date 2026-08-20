@@ -90,6 +90,31 @@ export function calcGroupBuyTotals(
   return out;
 }
 
+/** 공구상품별 매출 (수동 입력·옵션별 단가 예외 포함 — calcGroupBuyTotals와 같은 규칙) */
+export function calcRevenueByItem(
+  items: TotalsItem[],
+  orders: TotalsOrder[],
+  optionPrices: TotalsOptionPrice[] = []
+): Map<string, number> {
+  const out = new Map<string, number>();
+  const overrides = new Map<string, number | null>();
+  for (const p of optionPrices) overrides.set(`${p.group_buy_item_id}|${p.option_info}`, p.gonggu_price);
+
+  const itemByKey = new Map<string, TotalsItem>();
+  for (const it of items) {
+    if (it.manual_sold_qty != null) out.set(it.id, it.manual_sold_qty * (it.gonggu_price ?? 0));
+    if (it.store_product_no) itemByKey.set(`${it.group_buy_id}|${it.store_product_no}`, it);
+  }
+  for (const o of orders) {
+    if (!isLive(o.order_status)) continue;
+    const it = itemByKey.get(`${o.group_buy_id}|${String(o.store_product_no ?? "")}`);
+    if (!it || it.manual_sold_qty != null) continue;
+    const price = overrides.get(`${it.id}|${o.option_info ?? ""}`) ?? it.gonggu_price ?? 0;
+    out.set(it.id, (out.get(it.id) ?? 0) + (o.quantity ?? 0) * price);
+  }
+  return out;
+}
+
 /** 공구상품별 판매수량 (수동 입력 우선) */
 export function calcSoldByItem(
   items: TotalsItem[],

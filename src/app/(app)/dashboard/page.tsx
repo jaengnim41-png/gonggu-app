@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionProfile } from "@/lib/data/profile";
 import {
   calcGroupBuyTotals,
-  calcSoldByItem,
+  calcRevenueByItem,
   type TotalsItem,
   type TotalsOrder,
+  type TotalsOptionPrice,
 } from "@/lib/group-buys/totals";
 import { ScheduleSummary, type ScheduleEntry } from "@/components/schedule-summary";
 
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
   const { company } = await getSessionProfile();
   const supabase = await createClient();
 
-  const [{ data: gbData }, { data: itemData }, { data: orderData }, { data: gbcData }, { data: contactData }] =
+  const [{ data: gbData }, { data: itemData }, { data: orderData }, { data: gbcData }, { data: contactData }, { data: opData }] =
     await Promise.all([
       supabase.from("group_buys").select("id, title, status, start_date, end_date").order("created_at", { ascending: false }),
       supabase
@@ -44,6 +45,7 @@ export default async function DashboardPage() {
       supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
       supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
       supabase.from("contacts").select("id, name"),
+      supabase.from("group_buy_item_prices").select("group_buy_item_id, option_info, gonggu_price, margin_unit"),
     ]);
 
   const groupBuys = (gbData ?? []) as GB[];
@@ -78,18 +80,17 @@ export default async function DashboardPage() {
     vendors: vendorsByGb.get(g.id) ?? [],
   }));
 
-  // 공구별 매출 (판매수량 직접 입력분 포함 — 공통 규칙)
-  const totals = calcGroupBuyTotals(items as TotalsItem[], orders as TotalsOrder[]);
+  // 공구별 매출 (판매수량 직접 입력분·옵션별 단가 예외 포함 — 공통 규칙)
+  const totals = calcGroupBuyTotals(items as TotalsItem[], orders as TotalsOrder[], (opData ?? []) as TotalsOptionPrice[]);
   const revenueByGb = new Map([...totals].map(([k, v]) => [k, v.revenue]));
   const totalRevenue = [...totals.values()].reduce((s, v) => s + v.revenue, 0);
 
-  // 제품별 매출: 상품 단위로 (직접 입력분은 그 상품에 그대로)
-  const soldByItem = calcSoldByItem(items as TotalsItem[], orders as TotalsOrder[]);
+  // 제품별 매출: 상품 단위로 (직접 입력분·옵션별 단가 예외 포함)
+  const revByItem = calcRevenueByItem(items as TotalsItem[], orders as TotalsOrder[], (opData ?? []) as TotalsOptionPrice[]);
   const revenueByProduct = new Map<string, number>();
   for (const it of items) {
-    const q = soldByItem.get(it.id) ?? 0;
-    if (!q) continue;
-    const amount = q * (it.gonggu_price ?? 0);
+    const amount = revByItem.get(it.id) ?? 0;
+    if (!amount) continue;
     revenueByProduct.set(it.product_name, (revenueByProduct.get(it.product_name) ?? 0) + amount);
   }
 

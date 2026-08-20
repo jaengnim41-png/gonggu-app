@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { calcGroupBuyTotals, type TotalsItem, type TotalsOrder } from "@/lib/group-buys/totals";
+import { calcGroupBuyTotals, type TotalsItem, type TotalsOrder, type TotalsOptionPrice } from "@/lib/group-buys/totals";
 import { createGroupBuy } from "./actions";
 import { GroupBuyFilter, type GBRow } from "./group-buy-filter";
 
@@ -17,7 +17,7 @@ export default async function GroupBuysPage({
   const sp = await searchParams;
 
   const supabase = await createClient();
-  const [{ data: gbData }, { data: itemData }, { data: gbcData }, { data: contactData }, { data: orderData }] =
+  const [{ data: gbData }, { data: itemData }, { data: gbcData }, { data: contactData }, { data: orderData }, { data: opData }] =
     await Promise.all([
       supabase
         .from("group_buys")
@@ -29,10 +29,15 @@ export default async function GroupBuysPage({
       supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
       supabase.from("contacts").select("id, name"),
       supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
+      supabase.from("group_buy_item_prices").select("group_buy_item_id, option_info, gonggu_price, margin_unit"),
     ]);
 
-  // 공구별 매출(직접 입력분 포함 — 공통 규칙)
-  const totals = calcGroupBuyTotals((itemData ?? []) as TotalsItem[], (orderData ?? []) as TotalsOrder[]);
+  // 공구별 매출(직접 입력분·옵션별 단가 예외 포함 — 공통 규칙)
+  const totals = calcGroupBuyTotals(
+    (itemData ?? []) as TotalsItem[],
+    (orderData ?? []) as TotalsOrder[],
+    (opData ?? []) as TotalsOptionPrice[]
+  );
 
   const contactName = new Map(((contactData ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
   const productsByGb = new Map<string, Set<string>>();
@@ -74,7 +79,7 @@ export default async function GroupBuysPage({
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <h1 className="text-lg font-bold text-slate-900">공구</h1>
       <p className="mt-1 text-sm text-slate-500">
         공구를 등록하고, 제품·셀러·벤더별로 기간을 골라 볼 수 있습니다.

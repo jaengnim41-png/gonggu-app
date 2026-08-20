@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { calcGroupBuyTotals, type TotalsItem, type TotalsOrder } from "@/lib/group-buys/totals";
+import { calcGroupBuyTotals, type TotalsItem, type TotalsOrder, type TotalsOptionPrice } from "@/lib/group-buys/totals";
 import { createContact, bulkUploadContacts } from "../contacts/actions";
 import { ContactTable, type ContactRow } from "@/components/contact-table";
 
@@ -27,7 +27,7 @@ export default async function SellersPage({
   const { error, uok, uerror } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cData }, { data: gbData }, { data: itemData }, { data: orderData }, { data: linkData }] =
+  const [{ data: cData }, { data: gbData }, { data: itemData }, { data: orderData }, { data: linkData }, { data: opData }] =
     await Promise.all([
       supabase
         .from("contacts")
@@ -39,6 +39,7 @@ export default async function SellersPage({
         .select("id, group_buy_id, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
       supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
       supabase.from("contact_links").select("seller_id, vendor_id"),
+      supabase.from("group_buy_item_prices").select("group_buy_item_id, option_info, gonggu_price, margin_unit"),
     ]);
 
   const contacts = (cData ?? []) as Contact[];
@@ -54,10 +55,11 @@ export default async function SellersPage({
     vendorsBySeller.set(l.seller_id, arr);
   }
 
-  // 매출 집계 (판매수량 직접 입력분 포함 — 공통 규칙)
+  // 매출 집계 (판매수량 직접 입력분·옵션별 단가 예외 포함 — 공통 규칙)
   const totals = calcGroupBuyTotals(
     (itemData ?? []) as TotalsItem[],
-    (orderData ?? []) as TotalsOrder[]
+    (orderData ?? []) as TotalsOrder[],
+    (opData ?? []) as TotalsOptionPrice[]
   );
   const revenueByGb = new Map([...totals].map(([k, v]) => [k, v.revenue]));
   const gbCount = new Map<string, number>();
@@ -94,7 +96,7 @@ export default async function SellersPage({
     "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8">
       <h1 className="text-lg font-bold text-slate-900">셀러</h1>
       <p className="mt-1 text-sm text-slate-500">
         셀러 명단을 관리합니다. 공구에 연결하면 실적이 자동 집계되고, 벤더는 여러 곳 연결할 수 있습니다.
