@@ -31,6 +31,48 @@ export async function addStockIn(formData: FormData) {
   redirect("/inventory");
 }
 
+/**
+ * 재고 직접 수정: 입력한 숫자가 그대로 '가용'이 되도록 조정 기록을 넣습니다.
+ * (가용 = 입고합 − 판매합 이므로, 차이만큼 입고(조정) 행을 추가 — 자동 차감과 충돌 없음)
+ */
+export async function setStockLevel(formData: FormData) {
+  const optionId = String(formData.get("product_option_id") ?? "");
+  const target = parseInt(String(formData.get("target") ?? "").replace(/,/g, ""), 10);
+  if (!optionId || !Number.isFinite(target)) redirect("/inventory?error=input");
+
+  const { company } = await getSessionProfile();
+  if (!company) redirect("/onboarding");
+  const supabase = await createClient();
+
+  const [{ data: ins }, { data: orders }] = await Promise.all([
+    supabase.from("stock_ins").select("quantity").eq("product_option_id", optionId),
+    supabase
+      .from("inventory_orders")
+      .select("quantity, order_status")
+      .eq("product_option_id", optionId),
+  ]);
+  const inQ = (ins ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+  const soldQ = (orders ?? [])
+    .filter((o) => {
+      const st = o.order_status ?? "";
+      return !st.includes("취소") && !st.includes("반품");
+    })
+    .reduce((s, r) => s + (r.quantity ?? 0), 0);
+  const diff = target - (inQ - soldQ);
+
+  if (diff !== 0) {
+    const { error } = await supabase.from("stock_ins").insert({
+      company_id: company.id,
+      product_option_id: optionId,
+      quantity: diff,
+      note: "재고 직접 수정",
+    });
+    if (error) redirect("/inventory?error=save");
+  }
+  revalidatePath("/inventory");
+  redirect("/inventory");
+}
+
 /** 전체 주문 파일 업로드 → 재고 차감(멱등). 아는 옵션은 자동 매칭. */
 export async function uploadInventoryOrders(formData: FormData) {
   const file = formData.get("file");

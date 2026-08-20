@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { setStockLevel } from "./actions";
 
 export type StockGroup = {
   productId: string;
@@ -68,7 +69,8 @@ export function StockTable({ groups }: { groups: StockGroup[] }) {
         )}
       </div>
       <p className="mt-2 text-xs text-slate-400">
-        가용 = 입고 − 판매(전체 주문 업로드에서 자동 차감). 제품명을 누르면 옵션별로 펼쳐집니다.
+        가용 = 입고 − 판매(전체 주문 업로드에서 자동 차감). 제품명을 누르면 옵션별로 펼쳐지고,
+        가용 숫자를 고쳐 [저장]하면 현재 재고가 그 값으로 맞춰집니다.
       </p>
     </div>
   );
@@ -124,8 +126,25 @@ function GroupRows({
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums">{qty(o.inQ)}</td>
               <td className="px-4 py-2.5 text-right tabular-nums">{qty(o.soldQ)}</td>
-              <td className={"px-4 py-2.5 text-right font-semibold tabular-nums " + (olow ? "text-rose-600" : "text-emerald-600")}>
-                {qty(o.avail)}
+              <td className="px-4 py-2.5 text-right">
+                <form action={setStockLevel} className="inline-flex items-center justify-end gap-1">
+                  <input type="hidden" name="product_option_id" value={o.id} />
+                  <input
+                    name="target"
+                    inputMode="numeric"
+                    defaultValue={o.avail}
+                    className={
+                      "w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-sm font-semibold tabular-nums outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 " +
+                      (olow ? "text-rose-600" : "text-emerald-600")
+                    }
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    저장
+                  </button>
+                </form>
               </td>
               <td className="px-4 py-2.5">
                 <span className={"rounded-full px-2 py-0.5 text-[11px] font-medium " + (olow ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700")}>

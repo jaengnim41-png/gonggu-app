@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isLive } from "@/lib/orders/parse";
 import { addStockIn, uploadInventoryOrders, linkOption } from "./actions";
+import { bulkUploadProducts } from "../products/actions";
 import { CatalogTabs } from "@/components/catalog-tabs";
 import { StockTable, type StockGroup } from "./stock-table";
 
@@ -32,9 +33,9 @@ function qty(n: number) {
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; uok?: string; uerror?: string }>;
+  searchParams: Promise<{ error?: string; uok?: string; uerror?: string; pok?: string }>;
 }) {
-  const { error, uok, uerror } = await searchParams;
+  const { error, uok, uerror, pok } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: optData }, { data: siData }, { data: ioData }] =
@@ -111,6 +112,28 @@ export default async function InventoryPage({
       <p className="mt-1 text-sm text-slate-500">
         전체 주문 파일을 올리면 옵션별 재고가 자동 차감됩니다. (공구 판매집계와 분리)
       </p>
+
+      {/* 엑셀 통합 관리: 제품·가격·현재재고 한 파일 */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-900">엑셀로 한 번에 관리 (제품·가격·재고 통합)</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          제품 양식에 <b>현재재고</b> 칸이 있습니다. 내려받아 숫자를 고쳐 다시 올리면 제품·가격·재고가 한 번에 반영됩니다.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <a href="/api/products-template" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">📄 샘플 양식</a>
+          <a href="/api/products-export" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">⬇ 전체 내려받기(재고 포함)</a>
+          <form action={bulkUploadProducts} className="flex items-center gap-2">
+            <input type="hidden" name="back" value="/inventory" />
+            <input type="file" name="file" accept=".xlsx,.xls" required className="text-sm text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100" />
+            <button type="submit" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">일괄 반영</button>
+          </form>
+        </div>
+        {pok && (
+          <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+            일괄 반영 완료 — 새 제품 {pok.split("-")[0]} · 옵션 {pok.split("-")[1]} · 재고 설정 {pok.split("-")[2]}건
+          </p>
+        )}
+      </div>
 
       {/* 전체 주문 업로드 */}
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionProfile } from "@/lib/data/profile";
 import { parseProductWorkbook } from "@/lib/products/parse";
+import { isLive } from "@/lib/orders/parse";
 
 /** 폼 값에서 숫자를 뽑되, 비어 있으면 null */
 function num(v: FormDataEntryValue | null): number | null {
@@ -169,6 +170,22 @@ export async function bulkUploadProducts(formData: FormData) {
 
   const supabase = await createClient();
 
+  // 재고 계산용: 옵션별 현재 가용 (입고합 − 판매합)
+  const [{ data: allIns }, { data: allInvOrders }] = await Promise.all([
+    supabase.from("stock_ins").select("product_option_id, quantity"),
+    supabase.from("inventory_orders").select("product_option_id, quantity, order_status"),
+  ]);
+  const availByOpt = new Map<string, number>();
+  for (const r of allIns ?? []) {
+    availByOpt.set(r.product_option_id, (availByOpt.get(r.product_option_id) ?? 0) + (r.quantity ?? 0));
+  }
+  for (const o of allInvOrders ?? []) {
+    if (!o.product_option_id || !isLive(o.order_status)) continue;
+    availByOpt.set(o.product_option_id, (availByOpt.get(o.product_option_id) ?? 0) - (o.quantity ?? 0));
+  }
+  // 엑셀의 '현재재고'를 반영할 조정 기록 모음
+  const stockAdjust: { product_option_id: string; target: number }[] = [];
+
   // 현재 제품/옵션 조회(이름 기준 매칭)
   const { data: existP } = await supabase
     .from("products")
@@ -233,7 +250,9 @@ export async function bulkUploadProducts(formData: FormData) {
     for (const row of rows) {
       if (!row.optionName) continue;
       const existing = optByName.get(row.optionName);
+      let optionId: string | null = null;
       if (existing) {
+        optionId = existing.id;
         // 값이 있는 칸만 갱신 — 빈 칸이 기존 가격을 지우지 않도록
         const patch: Record<string, unknown> = {};
         if (row.sku) patch.option_key = row.sku;
@@ -245,20 +264,45 @@ export async function bulkUploadProducts(formData: FormData) {
         }
       } else {
         optOrder += 1;
-        await supabase.from("product_options").insert({
-          product_id: productId,
-          name: row.optionName,
-          option_key: row.sku,
-          normal_price: row.normalPrice,
-          gonggu_price: row.gongguPrice,
-          supply_price: row.supplyPrice,
-          sort_order: optOrder,
-        });
+        const { data: createdOpt } = await supabase
+          .from("product_options")
+          .insert({
+            product_id: productId,
+            name: row.optionName,
+            option_key: row.sku,
+            normal_price: row.normalPrice,
+            gonggu_price: row.gongguPrice,
+            supply_price: row.supplyPrice,
+            sort_order: optOrder,
+          })
+          .select("id")
+          .single();
+        optionId = createdOpt?.id ?? null;
       }
       optionsUpserted += 1;
+      // '현재재고' 칸이 채워져 있으면 그 숫자가 가용이 되도록 예약
+      if (optionId && row.stock != null) {
+        stockAdjust.push({ product_option_id: optionId, target: row.stock });
+      }
     }
   }
 
+  // 현재재고 반영: 목표값 − 현재 가용 만큼 조정 기록 추가
+  const adjustRows = stockAdjust
+    .map((a) => ({
+      company_id: company.id,
+      product_option_id: a.product_option_id,
+      quantity: a.target - (availByOpt.get(a.product_option_id) ?? 0),
+      note: "엑셀 일괄 재고 설정",
+    }))
+    .filter((r) => r.quantity !== 0);
+  if (adjustRows.length) {
+    await supabase.from("stock_ins").insert(adjustRows);
+  }
+
+  const back = str(formData.get("back"));
   revalidatePath("/products");
+  revalidatePath("/inventory");
+  if (back) redirect(`${back}?pok=${newProducts}-${optionsUpserted}-${stockAdjust.length}`);
   redirect(`/products?uok=${newProducts}-${optionsUpserted}`);
 }
