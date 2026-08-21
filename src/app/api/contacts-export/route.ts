@@ -23,32 +23,56 @@ export async function GET(request: NextRequest) {
 
   const nameById = new Map((allContacts ?? []).map((c) => [c.id, c.name]));
   const vendorsBySeller = new Map<string, string[]>();
+  const sellersByVendor = new Map<string, string[]>();
   for (const l of links ?? []) {
-    const arr = vendorsBySeller.get(l.seller_id) ?? [];
     const vn = nameById.get(l.vendor_id);
-    if (vn) arr.push(vn);
-    vendorsBySeller.set(l.seller_id, arr);
+    const sn = nameById.get(l.seller_id);
+    if (vn) {
+      const arr = vendorsBySeller.get(l.seller_id) ?? [];
+      arr.push(vn);
+      vendorsBySeller.set(l.seller_id, arr);
+    }
+    if (sn) {
+      const arr = sellersByVendor.get(l.vendor_id) ?? [];
+      arr.push(sn);
+      sellersByVendor.set(l.vendor_id, arr);
+    }
   }
 
-  const rows = (contacts ?? []).map((c) => ({
-    이름: c.name,
-    구분: kind,
-    인스타: c.instagram ?? "",
-    팔로워: c.followers ?? "",
-    연락처: c.phone ?? "",
-    주소: c.address ?? "",
-    메모: c.memo ?? "",
-    연결벤더: kind === "셀러" ? (vendorsBySeller.get(c.id) ?? []).join("; ") : "",
-  }));
+  // 벤더는 인스타·팔로워 없이 연결셀러, 셀러는 기존 그대로 연결벤더
+  const rows = (contacts ?? []).map((c) =>
+    kind === "벤더"
+      ? {
+          이름: c.name,
+          구분: kind,
+          연락처: c.phone ?? "",
+          주소: c.address ?? "",
+          메모: c.memo ?? "",
+          연결셀러: (sellersByVendor.get(c.id) ?? []).join("; "),
+        }
+      : {
+          이름: c.name,
+          구분: kind,
+          인스타: c.instagram ?? "",
+          팔로워: c.followers ?? "",
+          연락처: c.phone ?? "",
+          주소: c.address ?? "",
+          메모: c.memo ?? "",
+          연결벤더: (vendorsBySeller.get(c.id) ?? []).join("; "),
+        }
+  );
+
+  const emptyRow =
+    kind === "벤더"
+      ? { 이름: "", 구분: kind, 연락처: "", 주소: "", 메모: "", 연결셀러: "" }
+      : { 이름: "", 구분: kind, 인스타: "", 팔로워: "", 연락처: "", 주소: "", 메모: "", 연결벤더: "" };
 
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(
-    rows.length ? rows : [{ 이름: "", 구분: kind, 인스타: "", 팔로워: "", 연락처: "", 주소: "", 메모: "", 연결벤더: "" }]
-  );
-  ws["!cols"] = [
-    { wch: 18 }, { wch: 8 }, { wch: 16 }, { wch: 10 },
-    { wch: 16 }, { wch: 30 }, { wch: 20 }, { wch: 28 },
-  ];
+  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [emptyRow]);
+  ws["!cols"] =
+    kind === "벤더"
+      ? [{ wch: 20 }, { wch: 8 }, { wch: 16 }, { wch: 30 }, { wch: 20 }, { wch: 28 }]
+      : [{ wch: 18 }, { wch: 8 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 20 }, { wch: 28 }];
   XLSX.utils.book_append_sheet(wb, ws, kind + "목록");
 
   const buf: Buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });

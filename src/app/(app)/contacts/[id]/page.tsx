@@ -2,7 +2,12 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isLive } from "@/lib/orders/parse";
+import {
+  calcGroupBuyTotals,
+  type TotalsItem,
+  type TotalsOrder,
+  type TotalsOptionPrice,
+} from "@/lib/group-buys/totals";
 import { CopyLink } from "@/components/copy-link";
 import { ConfirmButton } from "@/components/confirm-button";
 import { SampleForm } from "@/components/sample-form";
@@ -41,8 +46,22 @@ type GB = {
   seller_contact_id: string | null;
   vendor_contact_id: string | null;
 };
-type Item = { store_product_no: string | null; gonggu_price: number | null; margin_unit: number | null };
-type Order = { group_buy_id: string; store_product_no: string | null; quantity: number; order_status: string | null };
+type Item = {
+  id: string;
+  group_buy_id: string;
+  product_name: string;
+  store_product_no: string | null;
+  gonggu_price: number | null;
+  margin_unit: number | null;
+  manual_sold_qty: number | null;
+};
+type Order = {
+  group_buy_id: string;
+  store_product_no: string | null;
+  option_info: string | null;
+  quantity: number;
+  order_status: string | null;
+};
 
 function won(n: number) {
   return "₩" + Math.round(n).toLocaleString("ko-KR");
@@ -102,8 +121,10 @@ export default async function ContactDetailPage({
       supabase
         .from("group_buys")
         .select("id, title, status, start_date, end_date, seller_contact_id, vendor_contact_id"),
-      supabase.from("group_buy_items").select("store_product_no, gonggu_price, margin_unit"),
-      supabase.from("orders").select("group_buy_id, store_product_no, quantity, order_status"),
+      supabase
+        .from("group_buy_items")
+        .select("id, group_buy_id, product_name, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
+      supabase.from("orders").select("group_buy_id, store_product_no, option_info, quantity, order_status"),
       supabase.from("guest_links").select("token, active").eq("contact_id", id).maybeSingle(),
       supabase
         .from("guests")
@@ -142,38 +163,81 @@ export default async function ContactDetailPage({
     : vendors.filter((v) => !linkedIds.has(v.id));
   const managers = (managerData ?? []) as { id: string; name: string; phone: string | null; memo: string | null }[];
 
-  // 이 거래처가 연결된 공구
-  const mine = ((gbData ?? []) as GB[]).filter((g) =>
-    isVendor ? g.vendor_contact_id === contact.id : g.seller_contact_id === contact.id
+  // 공구 연결(레거시 단일 필드 + 다중 연결 gb_contacts 모두)과 정산·옵션단가
+  const [{ data: gbcData }, { data: settleData }, { data: opData }] = await Promise.all([
+    supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
+    supabase.from("settlements").select("group_buy_id, fee_rate, status"),
+    supabase.from("group_buy_item_prices").select("group_buy_item_id, option_info, gonggu_price, margin_unit"),
+  ]);
+  const gbContacts = (gbcData ?? []) as { group_buy_id: string; role: string; contact_id: string }[];
+  const myGbIds = new Set(gbContacts.filter((x) => x.contact_id === contact.id).map((x) => x.group_buy_id));
+
+  // 이 거래처가 연결된 공구 (레거시 필드 또는 다중 연결)
+  const mine = ((gbData ?? []) as GB[]).filter(
+    (g) =>
+      myGbIds.has(g.id) ||
+      (isVendor ? g.vendor_contact_id === contact.id : g.seller_contact_id === contact.id)
   );
   const mineIds = new Set(mine.map((g) => g.id));
 
-  // 공구별 매출·마진·수량
-  const priceByPno = new Map<string, number>();
-  const marginByPno = new Map<string, number>();
-  for (const it of (itemData ?? []) as Item[]) {
-    if (!it.store_product_no) continue;
-    priceByPno.set(it.store_product_no, it.gonggu_price ?? 0);
-    marginByPno.set(it.store_product_no, it.margin_unit ?? 0);
-  }
+  // 공구별 매출·마진·수량 (공통 규칙: 직접 입력·옵션별 단가 포함)
+  const totalsMap = calcGroupBuyTotals(
+    (itemData ?? []) as TotalsItem[],
+    (orderData ?? []) as TotalsOrder[],
+    (opData ?? []) as TotalsOptionPrice[]
+  );
   const revByGb = new Map<string, number>();
   const marginByGb = new Map<string, number>();
   const qtyByGb = new Map<string, number>();
-  for (const o of (orderData ?? []) as Order[]) {
-    if (!mineIds.has(o.group_buy_id)) continue;
-    if (!isLive(o.order_status)) continue;
-    const pno = String(o.store_product_no ?? "");
-    const q = o.quantity ?? 0;
-    revByGb.set(o.group_buy_id, (revByGb.get(o.group_buy_id) ?? 0) + q * (priceByPno.get(pno) ?? 0));
-    marginByGb.set(o.group_buy_id, (marginByGb.get(o.group_buy_id) ?? 0) + q * (marginByPno.get(pno) ?? 0));
-    qtyByGb.set(o.group_buy_id, (qtyByGb.get(o.group_buy_id) ?? 0) + q);
+  for (const [gbId, t] of totalsMap) {
+    if (!mineIds.has(gbId)) continue;
+    revByGb.set(gbId, t.revenue);
+    marginByGb.set(gbId, t.margin);
+    qtyByGb.set(gbId, t.qty);
   }
+
+  // 공구별 제품명·상대(벤더면 셀러들, 셀러면 벤더들)
+  const productsByGb = new Map<string, Set<string>>();
+  for (const it of (itemData ?? []) as Item[]) {
+    if (!mineIds.has(it.group_buy_id)) continue;
+    if (!productsByGb.has(it.group_buy_id)) productsByGb.set(it.group_buy_id, new Set());
+    productsByGb.get(it.group_buy_id)!.add(it.product_name);
+  }
+  const counterRole = isVendor ? "셀러" : "벤더";
+  const counterByGb = new Map<string, Set<string>>();
+  for (const gc of gbContacts) {
+    if (!mineIds.has(gc.group_buy_id) || gc.role !== counterRole) continue;
+    const n = nameById.get(gc.contact_id);
+    if (!n) continue;
+    if (!counterByGb.has(gc.group_buy_id)) counterByGb.set(gc.group_buy_id, new Set());
+    counterByGb.get(gc.group_buy_id)!.add(n);
+  }
+  for (const g of mine) {
+    const legacyId = isVendor ? g.seller_contact_id : g.vendor_contact_id;
+    const n = legacyId ? nameById.get(legacyId) : null;
+    if (!n) continue;
+    if (!counterByGb.has(g.id)) counterByGb.set(g.id, new Set());
+    counterByGb.get(g.id)!.add(n);
+  }
+
+  // 공구별 정산액 = 마진 − 매출 × 수수료율(%)  (정산 정보가 있는 공구만)
+  const settles = (settleData ?? []) as { group_buy_id: string; fee_rate: number; status: string }[];
+  const settleByGb = new Map<string, { amount: number; status: string }>();
+  for (const st of settles) {
+    if (!mineIds.has(st.group_buy_id)) continue;
+    const rev = revByGb.get(st.group_buy_id) ?? 0;
+    const margin = marginByGb.get(st.group_buy_id) ?? 0;
+    settleByGb.set(st.group_buy_id, {
+      amount: margin - rev * ((st.fee_rate ?? 0) / 100),
+      status: st.status,
+    });
+  }
+  const totalSettle = [...settleByGb.values()].reduce((s, v) => s + v.amount, 0);
 
   const totalRev = mine.reduce((s, g) => s + (revByGb.get(g.id) ?? 0), 0);
   const totalMargin = mine.reduce((s, g) => s + (marginByGb.get(g.id) ?? 0), 0);
   const totalQty = mine.reduce((s, g) => s + (qtyByGb.get(g.id) ?? 0), 0);
   const liveCount = mine.filter((g) => g.status === "진행중").length;
-  const avgRev = mine.length ? totalRev / mine.length : 0;
 
   // 월별 매출 추이 (데이터가 있는 달만, 오래된 순)
   const byMonth = new Map<string, number>();
@@ -311,8 +375,12 @@ export default async function ContactDetailPage({
         {[
           { label: "누적 매출", value: won(totalRev), sub: "살아있는 주문 기준" },
           { label: "누적 마진", value: won(totalMargin), sub: `판매 ${num(totalQty)}개` },
-          { label: "공구", value: `${mine.length}건`, sub: `진행 중 ${liveCount}` },
-          { label: "공구당 평균 매출", value: won(avgRev), sub: mine.length ? `${mine.length}건 평균` : "—" },
+          { label: "공구 횟수", value: `${mine.length}건`, sub: `진행 중 ${liveCount}` },
+          {
+            label: "누적 정산액",
+            value: won(totalSettle),
+            sub: settleByGb.size ? `정산 ${settleByGb.size}건 · 마진 − 수수료` : "정산 기록 없음",
+          },
         ].map((c) => (
           <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-medium text-slate-500">{c.label}</p>
@@ -359,34 +427,53 @@ export default async function ContactDetailPage({
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3">공구</th>
+                  <th className="px-4 py-3">제품</th>
+                  <th className="px-4 py-3">{isVendor ? "셀러" : "벤더"}</th>
                   <th className="px-4 py-3">기간</th>
                   <th className="px-4 py-3">상태</th>
                   <th className="px-4 py-3 text-right">판매수량</th>
                   <th className="px-4 py-3 text-right">매출</th>
                   <th className="px-4 py-3 text-right">마진</th>
+                  <th className="px-4 py-3 text-right">정산액</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((g) => (
-                  <tr key={g.id} className="border-b border-slate-100 last:border-0">
-                    <td className="px-4 py-3">
-                      <Link href={`/group-buys/${g.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
-                        {g.title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {g.start_date ?? "—"} ~ {g.end_date ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLS[g.status] ?? "bg-slate-100 text-slate-600"}`}>
-                        {g.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{num(qtyByGb.get(g.id) ?? 0)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{won(revByGb.get(g.id) ?? 0)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">{won(marginByGb.get(g.id) ?? 0)}</td>
-                  </tr>
-                ))}
+                {history.map((g) => {
+                  const st = settleByGb.get(g.id);
+                  return (
+                    <tr key={g.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-4 py-3">
+                        <Link href={`/group-buys/${g.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                          {g.title}
+                        </Link>
+                      </td>
+                      <td className="max-w-40 truncate px-4 py-3 text-xs text-slate-600" title={[...(productsByGb.get(g.id) ?? [])].join(", ")}>
+                        {[...(productsByGb.get(g.id) ?? [])].join(", ") || "—"}
+                      </td>
+                      <td className="max-w-32 truncate px-4 py-3 text-xs text-slate-600" title={[...(counterByGb.get(g.id) ?? [])].join(", ")}>
+                        {[...(counterByGb.get(g.id) ?? [])].join(", ") || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {g.start_date ?? "—"} ~ {g.end_date ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLS[g.status] ?? "bg-slate-100 text-slate-600"}`}>
+                          {g.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{num(qtyByGb.get(g.id) ?? 0)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{won(revByGb.get(g.id) ?? 0)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">{won(marginByGb.get(g.id) ?? 0)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {st ? (
+                          <span title={`정산 상태: ${st.status}`} className="font-medium text-slate-900">{won(st.amount)}</span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

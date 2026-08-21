@@ -27,13 +27,14 @@ export default async function VendorsPage({
   const { error, uok, uerror } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cData }, { data: gbData }, { data: itemData }, { data: orderData }, { data: linkData }, { data: opData }] =
+  const [{ data: cData }, { data: gbData }, { data: gbcData }, { data: itemData }, { data: orderData }, { data: linkData }, { data: opData }] =
     await Promise.all([
       supabase
         .from("contacts")
         .select("id, kind, name, instagram, followers, phone, address, contact_info, memo, sort_order")
         .order("sort_order", { ascending: true }),
       supabase.from("group_buys").select("id, status, vendor_contact_id"),
+      supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
       supabase
         .from("group_buy_items")
         .select("id, group_buy_id, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
@@ -65,12 +66,22 @@ export default async function VendorsPage({
   const gbCount = new Map<string, number>();
   const liveCount = new Map<string, number>();
   const revenue = new Map<string, number>();
+  // 공구별 연결 벤더(레거시 단일 필드 + 다중 연결) — 중복 없이
+  const vendorsByGbId = new Map<string, Set<string>>();
   for (const g of (gbData ?? []) as GB[]) {
-    const vid = g.vendor_contact_id;
-    if (!vid) continue;
-    gbCount.set(vid, (gbCount.get(vid) ?? 0) + 1);
-    if (g.status === "진행중") liveCount.set(vid, (liveCount.get(vid) ?? 0) + 1);
-    revenue.set(vid, (revenue.get(vid) ?? 0) + (revenueByGb.get(g.id) ?? 0));
+    if (g.vendor_contact_id) vendorsByGbId.set(g.id, new Set([g.vendor_contact_id]));
+  }
+  for (const gc of (gbcData ?? []) as { group_buy_id: string; role: string; contact_id: string }[]) {
+    if (gc.role !== "벤더") continue;
+    if (!vendorsByGbId.has(gc.group_buy_id)) vendorsByGbId.set(gc.group_buy_id, new Set());
+    vendorsByGbId.get(gc.group_buy_id)!.add(gc.contact_id);
+  }
+  for (const g of (gbData ?? []) as GB[]) {
+    for (const vid of vendorsByGbId.get(g.id) ?? []) {
+      gbCount.set(vid, (gbCount.get(vid) ?? 0) + 1);
+      if (g.status === "진행중") liveCount.set(vid, (liveCount.get(vid) ?? 0) + 1);
+      revenue.set(vid, (revenue.get(vid) ?? 0) + (revenueByGb.get(g.id) ?? 0));
+    }
   }
 
   const rows: ContactRow[] = vendors.map((v) => {

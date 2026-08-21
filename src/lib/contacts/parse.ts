@@ -9,6 +9,7 @@ export type ParsedContactRow = {
   address: string | null;
   memo: string | null;
   vendorNames: string[]; // 셀러의 경우 연결할 벤더 이름들
+  sellerNames: string[]; // 벤더의 경우 연결할 셀러 이름들
 };
 
 const ALIASES: Record<string, string[]> = {
@@ -20,6 +21,7 @@ const ALIASES: Record<string, string[]> = {
   address: ["주소", "배송지", "address"],
   memo: ["메모", "비고", "특이사항", "memo"],
   vendors: ["연결벤더", "벤더", "소속벤더", "벤더사"],
+  sellers: ["연결셀러", "셀러", "소속셀러"],
 };
 
 function norm(s: unknown): string {
@@ -73,6 +75,7 @@ export function parseContactWorkbook(
     address: findCol("address"),
     memo: findCol("memo"),
     vendors: findCol("vendors"),
+    sellers: findCol("sellers"),
   };
 
   const out: ParsedContactRow[] = [];
@@ -88,8 +91,10 @@ export function parseContactWorkbook(
     if (kraw?.includes("벤더")) kind = "벤더";
     else if (kraw?.includes("셀러")) kind = "셀러";
 
-    const vraw = toStr(at(col.vendors));
-    const vendorNames = vraw ? vraw.split(/[;,/·]/).map((s) => s.trim()).filter(Boolean) : [];
+    const splitNames = (raw: string | null) =>
+      raw ? raw.split(/[;,/·]/).map((s) => s.trim()).filter(Boolean) : [];
+    const vendorNames = splitNames(toStr(at(col.vendors)));
+    const sellerNames = splitNames(toStr(at(col.sellers)));
 
     out.push({
       name,
@@ -100,6 +105,7 @@ export function parseContactWorkbook(
       address: toStr(at(col.address)),
       memo: toStr(at(col.memo)),
       vendorNames,
+      sellerNames,
     });
   }
   return out;

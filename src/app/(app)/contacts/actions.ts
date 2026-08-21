@@ -310,6 +310,7 @@ export async function bulkUploadContacts(formData: FormData) {
 
   let added = 0;
   const sellerVendorNames: { sellerId: string; vendorNames: string[] }[] = [];
+  const vendorSellerNames: { vendorId: string; sellerNames: string[] }[] = [];
 
   for (const row of parsed) {
     const key = row.kind + "|" + row.name;
@@ -346,21 +347,30 @@ export async function bulkUploadContacts(formData: FormData) {
     if (row.kind === "셀러" && row.vendorNames.length) {
       sellerVendorNames.push({ sellerId: id, vendorNames: row.vendorNames });
     }
+    if (row.kind === "벤더" && row.sellerNames.length) {
+      vendorSellerNames.push({ vendorId: id, sellerNames: row.sellerNames });
+    }
   }
 
-  // 셀러의 연결벤더를 이름으로 찾아 연결
-  if (sellerVendorNames.length) {
-    const { data: vendors } = await supabase
+  // 이름으로 찾아 연결: 셀러의 연결벤더 + 벤더의 연결셀러
+  if (sellerVendorNames.length || vendorSellerNames.length) {
+    const { data: all } = await supabase
       .from("contacts")
-      .select("id, name")
-      .eq("company_id", company.id)
-      .eq("kind", "벤더");
-    const vByName = new Map((vendors ?? []).map((v) => [v.name, v.id]));
+      .select("id, name, kind")
+      .eq("company_id", company.id);
+    const vByName = new Map((all ?? []).filter((c) => c.kind === "벤더").map((c) => [c.name, c.id]));
+    const sByName = new Map((all ?? []).filter((c) => c.kind === "셀러").map((c) => [c.name, c.id]));
     const links: { company_id: string; seller_id: string; vendor_id: string }[] = [];
     for (const { sellerId, vendorNames } of sellerVendorNames) {
       for (const vn of vendorNames) {
         const vid = vByName.get(vn);
         if (vid) links.push({ company_id: company.id, seller_id: sellerId, vendor_id: vid });
+      }
+    }
+    for (const { vendorId, sellerNames } of vendorSellerNames) {
+      for (const sn of sellerNames) {
+        const sid = sByName.get(sn);
+        if (sid) links.push({ company_id: company.id, seller_id: sid, vendor_id: vendorId });
       }
     }
     if (links.length) {

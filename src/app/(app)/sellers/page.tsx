@@ -27,13 +27,14 @@ export default async function SellersPage({
   const { error, uok, uerror } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cData }, { data: gbData }, { data: itemData }, { data: orderData }, { data: linkData }, { data: opData }] =
+  const [{ data: cData }, { data: gbData }, { data: gbcData }, { data: itemData }, { data: orderData }, { data: linkData }, { data: opData }] =
     await Promise.all([
       supabase
         .from("contacts")
         .select("id, kind, name, instagram, followers, phone, address, contact_info, memo, sort_order")
         .order("sort_order", { ascending: true }),
       supabase.from("group_buys").select("id, status, seller_contact_id"),
+      supabase.from("group_buy_contacts").select("group_buy_id, role, contact_id"),
       supabase
         .from("group_buy_items")
         .select("id, group_buy_id, store_product_no, gonggu_price, margin_unit, manual_sold_qty"),
@@ -65,12 +66,22 @@ export default async function SellersPage({
   const gbCount = new Map<string, number>();
   const liveCount = new Map<string, number>();
   const revenue = new Map<string, number>();
+  // 공구별 연결 셀러(레거시 단일 필드 + 다중 연결) — 중복 없이
+  const sellersByGbId = new Map<string, Set<string>>();
   for (const g of (gbData ?? []) as GB[]) {
-    const sid = g.seller_contact_id;
-    if (!sid) continue;
-    gbCount.set(sid, (gbCount.get(sid) ?? 0) + 1);
-    if (g.status === "진행중") liveCount.set(sid, (liveCount.get(sid) ?? 0) + 1);
-    revenue.set(sid, (revenue.get(sid) ?? 0) + (revenueByGb.get(g.id) ?? 0));
+    if (g.seller_contact_id) sellersByGbId.set(g.id, new Set([g.seller_contact_id]));
+  }
+  for (const gc of (gbcData ?? []) as { group_buy_id: string; role: string; contact_id: string }[]) {
+    if (gc.role !== "셀러") continue;
+    if (!sellersByGbId.has(gc.group_buy_id)) sellersByGbId.set(gc.group_buy_id, new Set());
+    sellersByGbId.get(gc.group_buy_id)!.add(gc.contact_id);
+  }
+  for (const g of (gbData ?? []) as GB[]) {
+    for (const sid of sellersByGbId.get(g.id) ?? []) {
+      gbCount.set(sid, (gbCount.get(sid) ?? 0) + 1);
+      if (g.status === "진행중") liveCount.set(sid, (liveCount.get(sid) ?? 0) + 1);
+      revenue.set(sid, (revenue.get(sid) ?? 0) + (revenueByGb.get(g.id) ?? 0));
+    }
   }
 
   const rows: ContactRow[] = sellers.map((s) => {
