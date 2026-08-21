@@ -23,6 +23,7 @@ type Option = {
   normal_price: number | null;
   gonggu_price: number | null;
   supply_price: number | null;
+  seller_supply_price?: number | null;
 };
 
 function won(n: number | null) {
@@ -48,13 +49,21 @@ export default async function ProductDetailPage({
 
   if (!product) notFound();
 
-  const { data: optData } = await supabase
+  let optRes = await supabase
     .from("product_options")
-    .select("id, name, option_key, normal_price, gonggu_price, supply_price")
+    .select("id, name, option_key, normal_price, gonggu_price, supply_price, seller_supply_price")
     .eq("product_id", id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
-  const options = (optData ?? []) as Option[];
+  if (optRes.error) {
+    optRes = (await supabase
+      .from("product_options")
+      .select("id, name, option_key, normal_price, gonggu_price, supply_price")
+      .eq("product_id", id)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })) as unknown as typeof optRes;
+  }
+  const options = (optRes.data ?? []) as Option[];
 
   // 옵션별 재고(가용 = 입고 − 판매) 계산
   const optionIds = options.map((o) => o.id);
@@ -93,7 +102,7 @@ export default async function ProductDetailPage({
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
           {product.category && <span>{product.category}</span>}
           <span>정상가 {won(product.normal_price)}</span>
-          <span>공급가 {won(product.supply_price)}</span>
+          <span>벤더공급가 {won(product.supply_price)}</span>
           {product.detail_url && (
             <a
               href={product.detail_url}
@@ -137,8 +146,12 @@ export default async function ProductDetailPage({
             <input name="gonggu_price" inputMode="numeric" placeholder="16900" className={inputCls} />
           </label>
           <label className="text-sm font-medium text-slate-700">
-            공급가
+            벤더공급가
             <input name="supply_price" inputMode="numeric" placeholder="12675" className={inputCls} />
+          </label>
+          <label className="text-sm font-medium text-slate-700">
+            셀러공급가
+            <input name="seller_supply_price" inputMode="numeric" placeholder="13500" className={inputCls} />
           </label>
           <label className="text-sm font-medium text-slate-700">
             재고 구분값(선택)
@@ -173,7 +186,8 @@ export default async function ProductDetailPage({
                 <th className="px-4 py-3">옵션명</th>
                 <th className="px-4 py-3 text-right">정상가</th>
                 <th className="px-4 py-3 text-right">공구가</th>
-                <th className="px-4 py-3 text-right">공급가</th>
+                <th className="px-4 py-3 text-right">벤더공급가</th>
+                <th className="px-4 py-3 text-right">셀러공급가</th>
                 <th className="px-4 py-3 text-right">가용재고</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -192,6 +206,7 @@ export default async function ProductDetailPage({
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.normal_price)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.gonggu_price)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{won(o.supply_price)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{won(o.seller_supply_price ?? null)}</td>
                   <td className={"px-4 py-3 text-right font-semibold tabular-nums " + ((availByOpt.get(o.id) ?? 0) <= 10 ? "text-rose-600" : "text-emerald-600")}>
                     {(availByOpt.get(o.id) ?? 0).toLocaleString("ko-KR")}
                   </td>

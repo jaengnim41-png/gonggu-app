@@ -23,6 +23,7 @@ type RawOption = {
   normal_price: number | null;
   gonggu_price: number | null;
   supply_price: number | null;
+  seller_supply_price?: number | null;
 };
 type StockIn = { product_option_id: string; quantity: number };
 type InvOrder = {
@@ -45,16 +46,26 @@ export default async function ProductsPage({
   const { error, uok, uerror, iok, ierror } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: pData }, { data: optData }, { data: siData }, { data: ioData }] = await Promise.all([
+  // seller_supply_price 컬럼이 아직 없을 수 있어(스키마 19 미적용) 실패 시 없이 다시 조회
+  let optRes = await supabase
+    .from("product_options")
+    .select("id, product_id, name, option_key, normal_price, gonggu_price, supply_price, seller_supply_price")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (optRes.error) {
+    optRes = (await supabase
+      .from("product_options")
+      .select("id, product_id, name, option_key, normal_price, gonggu_price, supply_price")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })) as unknown as typeof optRes;
+  }
+  const optData = optRes.data;
+
+  const [{ data: pData }, { data: siData }, { data: ioData }] = await Promise.all([
     supabase
       .from("products")
       .select("id, name, category, detail_url, normal_price, supply_price, selling_point, caution")
       .order("sort_order", { ascending: true }),
-    supabase
-      .from("product_options")
-      .select("id, product_id, name, option_key, normal_price, gonggu_price, supply_price")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true }),
     supabase.from("stock_ins").select("product_option_id, quantity"),
     supabase
       .from("inventory_orders")
@@ -99,6 +110,7 @@ export default async function ProductsPage({
       normal_price: o.normal_price,
       gonggu_price: o.gonggu_price,
       supply_price: o.supply_price,
+      seller_supply_price: o.seller_supply_price ?? null,
       inQ,
       soldQ,
       avail: inQ - soldQ,

@@ -14,20 +14,21 @@ export async function GET() {
     "SKU",
     "정상가",
     "공구가",
-    "공급가",
+    "벤더공급가",
+    "셀러공급가",
     "현재재고",
   ];
   const example = [
-    ["케어백 1세대", "케어백", "https://smartstore.naver.com/uddyu", "서양배", "CB1-013", 23000, 16900, 12675, 4340],
-    ["케어백 1세대", "케어백", "", "비닐", "CB1-014", 22500, 14000, 10500, 2500],
-    ["콩딱", "도어쿠션", "", "콩딱 A(1+1)", "KD-001", 23900, 15300, 11016, 1200],
+    ["케어백 1세대", "케어백", "https://smartstore.naver.com/uddyu", "서양배", "CB1-013", 23000, 16900, 12675, "", 4340],
+    ["케어백 1세대", "케어백", "", "비닐", "CB1-014", 22500, 14000, 10500, "", 2500],
+    ["콩딱", "도어쿠션", "", "콩딱 A(1+1)", "KD-001", 23900, 15300, 11016, "", 1200],
   ];
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([headers, ...example]);
   ws["!cols"] = [
     { wch: 16 }, { wch: 12 }, { wch: 34 }, { wch: 22 },
-    { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+    { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
   ];
   XLSX.utils.book_append_sheet(wb, ws, "제품등록양식");
 

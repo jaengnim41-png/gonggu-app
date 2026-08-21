@@ -128,14 +128,22 @@ export async function addOption(formData: FormData) {
   if (!productId || !name) redirect(`/products/${productId}?error=name`);
 
   const supabase = await createClient();
-  const { error } = await supabase.from("product_options").insert({
+  const base = {
     product_id: productId,
     name,
     option_key: str(formData.get("option_key")),
     normal_price: num(formData.get("normal_price")),
     gonggu_price: num(formData.get("gonggu_price")),
     supply_price: num(formData.get("supply_price")),
-  });
+  };
+  const seller = num(formData.get("seller_supply_price"));
+  let { error } = await supabase
+    .from("product_options")
+    .insert((seller != null ? { ...base, seller_supply_price: seller } : base) as never);
+  // 셀러공급가 컬럼이 아직 없으면(스키마 19 미적용) 그 값 없이 재시도
+  if (error && seller != null) {
+    ({ error } = await supabase.from("product_options").insert(base));
+  }
 
   if (error) redirect(`/products/${productId}?error=save`);
   revalidatePath(`/products/${productId}`);
@@ -259,25 +267,36 @@ export async function bulkUploadProducts(formData: FormData) {
         if (row.normalPrice != null) patch.normal_price = row.normalPrice;
         if (row.gongguPrice != null) patch.gonggu_price = row.gongguPrice;
         if (row.supplyPrice != null) patch.supply_price = row.supplyPrice;
+        if (row.sellerSupplyPrice != null) patch.seller_supply_price = row.sellerSupplyPrice;
         if (Object.keys(patch).length) {
-          await supabase.from("product_options").update(patch).eq("id", existing.id);
+          const { error } = await supabase.from("product_options").update(patch).eq("id", existing.id);
+          // 셀러공급가 컬럼이 아직 없으면(스키마 19 미적용) 그 값만 빼고 재시도
+          if (error && patch.seller_supply_price !== undefined) {
+            delete patch.seller_supply_price;
+            if (Object.keys(patch).length) await supabase.from("product_options").update(patch).eq("id", existing.id);
+          }
         }
       } else {
         optOrder += 1;
-        const { data: createdOpt } = await supabase
+        const base = {
+          product_id: productId,
+          name: row.optionName,
+          option_key: row.sku,
+          normal_price: row.normalPrice,
+          gonggu_price: row.gongguPrice,
+          supply_price: row.supplyPrice,
+          sort_order: optOrder,
+        };
+        let ins = await supabase
           .from("product_options")
-          .insert({
-            product_id: productId,
-            name: row.optionName,
-            option_key: row.sku,
-            normal_price: row.normalPrice,
-            gonggu_price: row.gongguPrice,
-            supply_price: row.supplyPrice,
-            sort_order: optOrder,
-          })
+          .insert((row.sellerSupplyPrice != null ? { ...base, seller_supply_price: row.sellerSupplyPrice } : base) as never)
           .select("id")
           .single();
-        optionId = createdOpt?.id ?? null;
+        // 셀러공급가 컬럼이 아직 없으면 그 값 없이 재시도
+        if (ins.error && row.sellerSupplyPrice != null) {
+          ins = await supabase.from("product_options").insert(base).select("id").single();
+        }
+        optionId = ins.data?.id ?? null;
       }
       optionsUpserted += 1;
       // '현재재고' 칸이 채워져 있으면 그 숫자가 가용이 되도록 예약

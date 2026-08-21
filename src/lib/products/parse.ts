@@ -8,7 +8,8 @@ export type ParsedProductRow = {
   sku: string | null;
   normalPrice: number | null;
   gongguPrice: number | null;
-  supplyPrice: number | null;
+  supplyPrice: number | null; // 벤더 공급가
+  sellerSupplyPrice: number | null; // 셀러 공급가
   stock: number | null;
 };
 
@@ -21,7 +22,8 @@ const HEADER_ALIASES: Record<string, string[]> = {
   sku: ["sku", "sku코드", "코드", "재고코드"],
   normalPrice: ["정상가", "정상판매가", "정가"],
   gongguPrice: ["공구가", "공구판매가", "공동구매가"],
-  supplyPrice: ["공급가", "벤더공급가", "벤더 공급가"],
+  supplyPrice: ["공급가", "벤더공급가", "벤더 공급가", "벤더 공급가(vat포함)"],
+  sellerSupplyPrice: ["셀러공급가", "셀러 공급가", "셀러 공급가(vat포함)"],
   stock: ["현재재고", "재고", "재고수량", "전체수량"],
 };
 
@@ -85,6 +87,7 @@ export function parseProductWorkbook(data: Uint8Array): ParsedProductRow[] {
     normalPrice: findCol("normalPrice"),
     gongguPrice: findCol("gongguPrice"),
     supplyPrice: findCol("supplyPrice"),
+    sellerSupplyPrice: findCol("sellerSupplyPrice"),
     stock: findCol("stock"),
   };
 
@@ -116,6 +119,7 @@ export function parseProductWorkbook(data: Uint8Array): ParsedProductRow[] {
       normalPrice: toNum(at(col.normalPrice)),
       gongguPrice: toNum(at(col.gongguPrice)),
       supplyPrice: toNum(at(col.supplyPrice)),
+      sellerSupplyPrice: toNum(at(col.sellerSupplyPrice)),
       stock: toNum(at(col.stock)),
     });
   }

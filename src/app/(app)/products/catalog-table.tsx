@@ -12,7 +12,8 @@ export type CatalogOption = {
   option_key: string | null;
   normal_price: number | null;
   gonggu_price: number | null;
-  supply_price: number | null;
+  supply_price: number | null; // 벤더 공급가
+  seller_supply_price: number | null; // 셀러 공급가
   inQ: number;
   soldQ: number;
   avail: number;
@@ -66,14 +67,15 @@ export function CatalogTable({ products }: { products: CatalogRow[] }) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-2 py-3 text-center">순서</th>
               <th className="px-4 py-3">제품 / 옵션</th>
               <th className="px-3 py-3 text-right">정상가</th>
               <th className="px-3 py-3 text-right">공구가</th>
-              <th className="px-3 py-3 text-right">공급가</th>
+              <th className="px-3 py-3 text-right">벤더공급가</th>
+              <th className="px-3 py-3 text-right">셀러공급가</th>
               <th className="px-3 py-3 text-right">입고</th>
               <th className="px-3 py-3 text-right">판매</th>
               <th className="px-3 py-3 text-right">가용</th>
@@ -114,6 +116,7 @@ export function CatalogTable({ products }: { products: CatalogRow[] }) {
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{won(p.normal_price)}</td>
                     <td className="px-3 py-2.5 text-right text-slate-300">—</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{won(p.supply_price)}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-300">—</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{qty(p.totalIn)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{qty(p.totalSold)}</td>
                     <td className={"px-3 py-2.5 text-right font-bold tabular-nums " + (low ? "text-rose-600" : "text-emerald-600")}>{qty(p.totalAvail)}</td>
@@ -150,7 +153,7 @@ export function CatalogTable({ products }: { products: CatalogRow[] }) {
                   {/* 제품 정보 수정 폼 */}
                   {editing === p.id && (
                     <tr className="bg-slate-50">
-                      <td colSpan={10} className="px-4 py-4">
+                      <td colSpan={11} className="px-4 py-4">
                         <form action={updateProduct} className="grid gap-3 sm:grid-cols-2">
                           <input type="hidden" name="id" value={p.id} />
                           <label className="text-xs font-medium text-slate-600 sm:col-span-2">
@@ -208,6 +211,7 @@ export function CatalogTable({ products }: { products: CatalogRow[] }) {
                           <td className="px-3 py-2 text-right tabular-nums text-slate-500">{won(o.normal_price)}</td>
                           <td className="px-3 py-2 text-right tabular-nums font-medium text-indigo-700">{won(o.gonggu_price)}</td>
                           <td className="px-3 py-2 text-right tabular-nums text-slate-500">{won(o.supply_price)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-slate-500">{won(o.seller_supply_price)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{qty(o.inQ)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{qty(o.soldQ)}</td>
                           <td className="px-3 py-2 text-right">
