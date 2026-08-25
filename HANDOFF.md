@@ -26,6 +26,10 @@ cd gonggu-app
 npm install
 ```
 
+> 윈도우 PowerShell에서는 명령을 **한 줄에 하나씩** 실행하세요.
+> `cd gonggu-app && npm install` 처럼 `&&`로 붙이면
+> `'&&' 토큰은 이 버전에서 올바른 문 구분 기호가 아닙니다` 오류가 납니다.
+
 ## .env.local 만들기 (필수)
 
 이 파일은 보안상 GitHub에 올라가지 않으므로 새 PC에서 직접 만듭니다.
